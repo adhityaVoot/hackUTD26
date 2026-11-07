@@ -1,0 +1,41 @@
+---
+description: "Tandem project rules — ALWAYS apply. Read TANDEM_SPEC.md before any task."
+globs: **/*.ts,**/*.tsx,**/*.css,**/*.json,**/*.md
+alwaysApply: true
+---
+# Tandem — project rules
+
+You are building **Tandem**, a multiplayer household financial-health navigator for HackUTD (tracks: PNC, Spacetime, Capital One Nessie). The full spec is `TANDEM_SPEC.md` at the repo root. **Read the sections a task names before writing code.** When the spec, the official SpacetimeDB 2.x docs, and your training data disagree, the spec and docs win.
+
+## Golden rules (never break)
+1. **One backend:** all server logic lives in `spacetimedb/src/`. No Express, Next API routes, Supabase, Firebase, Postgres, or Python at runtime. The React app only renders subscribed rows and calls reducers.
+2. **Reducers are deterministic:** no `fetch`, `Date.now()`, or `Math.random()` in reducers or views. Use `ctx.timestamp`, `ctx.random`, or `engine/rng.ts`.
+3. **Network only in procedures** via `ctx.http.fetch`, never inside `ctx.withTx`. Only hosts: the AI provider (`ctx.env.AI_BASE_URL`) and Nessie (`ctx.env.NESSIE_BASE_URL`). Trigger procedures by inserting a schedule-table row from a reducer; the client never calls procedures.
+4. **Raw financial tables are private** (no `public: true`). Clients read through per-caller views. **Views use only indexed lookups** (`.find()`, `.filter()` on indexed columns, `.count()`) — never `.iter()`, never writes.
+5. **Every client-callable reducer starts with an auth helper** from `spacetimedb/src/auth.ts` (`requireMember`, `requireCoOwner`, `requireStepUp`, `requireAdmin`). Identity is `ctx.sender`; never trust identity/person args as proof.
+6. **Money = integer cents** (`t.i64()`, bigint). Engine uses number cents internally; convert at the boundary.
+7. **The AI never produces user-visible numbers.** Engine computes; AI picks a candidate id and writes text with `{slots}`; reject AI text containing digits.
+8. **Secrets only in env vars** (`ctx.env`). Never in tables, code, client, logs, or return values.
+9. **User-facing reducer errors:** `throw new SenderError('...')`.
+10. **Append-only logs:** `consentLog`, `agentLog` are never updated or deleted.
+11. **No unlimited access:** every grant has `expiresAt` ≤ 90 days. No "until revoked" option.
+12. **Engine code (`spacetimedb/src/engine/`) imports nothing from `spacetimedb`** so it stays unit-testable with vitest.
+
+## SpacetimeDB 2.x TypeScript facts (verified)
+- Imports: `schema, table, t, SenderError` from `'spacetimedb/server'`; `ScheduleAt, TimeDuration, Identity, Timestamp` from `'spacetimedb'`; React `useTable, useReducer, useSpacetimeDB, SpacetimeDBProvider` from `'spacetimedb/react'`; generated `tables, reducers, DbConnection` from `./module_bindings`.
+- `const spacetimedb = schema({ tableA, tableB }, { env: { KEY: t.string().optional() } }); export default spacetimedb;`
+- Reducer: `export const doThing = spacetimedb.reducer({ arg: t.string() }, (ctx, { arg }) => { ... })`. Name comes from the export. Don't import `ReducerContext`.
+- Insert autoInc rows with `id: 0n`. Lookups: `ctx.db.x.id.find(id)`, `ctx.db.x.someIndex.filter(v)`, `ctx.db.x.id.update({...row, field})`, `ctx.db.x.id.delete(id)`.
+- Columns: `t.u64().primaryKey().autoInc()`, `.index('btree')`, `.unique()`, `.optional()`. Use `t.object` (not `t.struct`), `.autoInc()` (not `.autoIncrement()`).
+- Scheduled: table has `scheduledId: t.u64().primaryKey().autoInc()` + `scheduledAt: t.scheduleAt()`; bind with `spacetimedb.reducer({ onSchedule: tbl }, { arg: tbl.rowType }, (ctx, { arg }) => {})` or `spacetimedb.procedure({ onSchedule: tbl }, { arg: tbl.rowType }, t.unit(), (ctx, { arg }) => { return {}; })`. `ScheduleAt.interval(micros)` / `ScheduleAt.time(micros)` with bigint microseconds. Scheduled procedures delete their row before running.
+- Procedure DB access only inside `ctx.withTx(tx => ...)` (may run more than once; no side effects inside). `ctx.http.fetch(url, { method, headers, body, timeout: TimeDuration.fromMillis(30000) })` is synchronous → `res.status`, `res.text()`, `res.json()`.
+- View: `export const myX = spacetimedb.view({ name: 'my_x', public: true }, t.array(rowType), (ctx) => ...)`; caller is `ctx.sender` (a property). Projections use `t.row('Name', {...})`. No duplicate primary keys in results.
+- Client: reducer calls take ONE object argument and return a Promise — always `await` + try/catch → toast. Generated row fields are camelCase; u64/i64 are `bigint`. For views, use the generated accessor in `src/module_bindings` (check it exists); otherwise subscribe via SQL.
+- After schema changes, bindings regenerate (`spacetime dev`, or `spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb`). Never edit `src/module_bindings` by hand.
+
+## Editing behavior
+- Make the smallest change that completes the task. Don't touch unrelated files or add dependencies without saying why.
+- Do NOT invent SpacetimeDB APIs. If unsure, say so and point to the doc page to check.
+- After each task: list files changed, how to verify (exact CLI/SQL or UI steps), and any spec items marked VERIFY you relied on.
+- `spacetimedb/src/index.ts` is the only file that calls `spacetimedb.*` (tables in `tables.ts`, helpers in `auth.ts`, logic in `engine/`, `ai/`, `nessie/`).
+- UI copy is neutral and never blames a person ("household cash", not "Sam's spending"). Vital bands always show icon + word, not color alone.
