@@ -8,9 +8,345 @@ import {
   t as __t,
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
-} from 'spacetimedb';
+} from "spacetimedb";
 
-export const Person = __t.object('Person', {
+export const Account = __t.object("Account", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  ownerPersonId: __t.u64(),
+  isJoint: __t.bool(),
+  kind: __t.string(),
+  nickname: __t.string(),
+  balanceCents: __t.i64(),
+  limitCents: __t.i64(),
+  aprBps: __t.i32(),
+  bufferCents: __t.i64(),
+  maturityDay: __t.i32(),
+  nessieId: __t.string(),
+});
+export type Account = __Infer<typeof Account>;
+
+export const AgentLog = __t.object("AgentLog", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  runId: __t.u64(),
+  step: __t.string(),
+  detail: __t.string(),
+  flagged: __t.bool(),
+  at: __t.timestamp(),
+});
+export type AgentLog = __Infer<typeof AgentLog>;
+
+export const AiJob = __t.object("AiJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  runId: __t.u64(),
+});
+export type AiJob = __Infer<typeof AiJob>;
+
+export const AiRun = __t.object("AiRun", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  kind: __t.string(),
+  requesterPersonId: __t.u64(),
+  inputJson: __t.string(),
+  status: __t.string(),
+  resultScenarioId: __t.u64(),
+  summary: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AiRun = __Infer<typeof AiRun>;
+
+export const AiUsage = __t.object("AiUsage", {
+  householdId: __t.u64(),
+  windowStart: __t.timestamp(),
+  count: __t.u32(),
+});
+export type AiUsage = __Infer<typeof AiUsage>;
+
+export const Alert = __t.object("Alert", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  routedToPersonId: __t.u64(),
+  aboutPersonId: __t.u64(),
+  kind: __t.string(),
+  day: __t.i32(),
+  riskPct: __t.f64(),
+  scenarioId: __t.u64(),
+  message: __t.string(),
+  read: __t.bool(),
+  createdAt: __t.timestamp(),
+});
+export type Alert = __Infer<typeof Alert>;
+
+export const Approval = __t.object("Approval", {
+  id: __t.u64(),
+  scenarioId: __t.u64(),
+  householdId: __t.u64(),
+  personId: __t.u64(),
+  decision: __t.string(),
+  at: __t.timestamp(),
+});
+export type Approval = __Infer<typeof Approval>;
+
+export const BacktestResult = __t.object("BacktestResult", {
+  id: __t.u64(),
+  runLabel: __t.string(),
+  households: __t.u32(),
+  recallAt5D: __t.f64(),
+  precision: __t.f64(),
+  medianLeadDays: __t.f64(),
+  bandCoverage: __t.f64(),
+  brier: __t.f64(),
+  baselineNaiveRecall: __t.f64(),
+  createdAt: __t.timestamp(),
+});
+export type BacktestResult = __Infer<typeof BacktestResult>;
+
+export const ClockTick = __t.object("ClockTick", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  householdId: __t.u64(),
+});
+export type ClockTick = __Infer<typeof ClockTick>;
+
+export const Commitment = __t.object("Commitment", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  scenarioId: __t.u64(),
+  label: __t.string(),
+  dueDay: __t.i32(),
+  done: __t.bool(),
+  transferFromAccountId: __t.u64(),
+  transferToAccountId: __t.u64(),
+  amountCents: __t.i64(),
+  bankStatus: __t.string(),
+  nessieTransferId: __t.string(),
+});
+export type Commitment = __Infer<typeof Commitment>;
+
+export const ConsentLog = __t.object("ConsentLog", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  actorPersonId: __t.u64(),
+  accountId: __t.u64(),
+  action: __t.string(),
+  detail: __t.string(),
+  at: __t.timestamp(),
+});
+export type ConsentLog = __Infer<typeof ConsentLog>;
+
+export const DailyMaintenance = __t.object("DailyMaintenance", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type DailyMaintenance = __Infer<typeof DailyMaintenance>;
+
+export const ForecastDay = __t.object("ForecastDay", {
+  id: __t.u64(),
+  scenarioId: __t.u64(),
+  householdId: __t.u64(),
+  accountId: __t.u64(),
+  day: __t.i32(),
+  p10Cents: __t.i64(),
+  p50Cents: __t.i64(),
+  p90Cents: __t.i64(),
+  pBelowBuffer: __t.f64(),
+});
+export type ForecastDay = __Infer<typeof ForecastDay>;
+
+export const FutureTxn = __t.object("FutureTxn", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  accountId: __t.u64(),
+  day: __t.i32(),
+  amountCents: __t.i64(),
+  category: __t.string(),
+  merchantCode: __t.string(),
+  rawDescription: __t.string(),
+});
+export type FutureTxn = __Infer<typeof FutureTxn>;
+
+export const Goal = __t.object("Goal", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  ownerPersonId: __t.u64(),
   name: __t.string(),
+  targetCents: __t.i64(),
+  targetDay: __t.i32(),
+  accountId: __t.u64(),
+});
+export type Goal = __Infer<typeof Goal>;
+
+export const Grant = __t.object("Grant", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  accountId: __t.u64(),
+  grantorPersonId: __t.u64(),
+  granteePersonId: __t.u64(),
+  granteeIdentityHex: __t.string(),
+  level: __t.string(),
+  historyWindowDays: __t.i32(),
+  expiresAt: __t.timestamp(),
+  status: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type Grant = __Infer<typeof Grant>;
+
+export const GrantExpiry = __t.object("GrantExpiry", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  grantId: __t.u64(),
+});
+export type GrantExpiry = __Infer<typeof GrantExpiry>;
+
+export const Household = __t.object("Household", {
+  id: __t.u64(),
+  name: __t.string(),
+  inviteCode: __t.string(),
+  cosignThresholdCents: __t.i64(),
+  baselineScenarioId: __t.u64(),
+  simDay: __t.i32(),
+  clockScheduleId: __t.u64(),
+  secondsPerDay: __t.u32(),
+  aiEnabled: __t.bool(),
+  seed: __t.u64(),
+  createdAt: __t.timestamp(),
+});
+export type Household = __Infer<typeof Household>;
+
+export const Member = __t.object("Member", {
+  identity: __t.identity(),
+  householdId: __t.u64(),
+  personId: __t.u64(),
+  kind: __t.string(),
+  online: __t.bool(),
+  lastActiveAt: __t.timestamp(),
+  stepUpAt: __t.timestamp(),
+});
+export type Member = __Infer<typeof Member>;
+
+export const NessieJob = __t.object("NessieJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  householdId: __t.u64(),
+  kind: __t.string(),
+  cursor: __t.u32(),
+});
+export type NessieJob = __Infer<typeof NessieJob>;
+
+export const NessieMap = __t.object("NessieMap", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  localKind: __t.string(),
+  localId: __t.u64(),
+  nessieId: __t.string(),
+});
+export type NessieMap = __Infer<typeof NessieMap>;
+
+export const NessieStatus = __t.object("NessieStatus", {
+  householdId: __t.u64(),
+  lastSyncAt: __t.timestamp(),
+  lastError: __t.string(),
+  seeded: __t.bool(),
+});
+export type NessieStatus = __Infer<typeof NessieStatus>;
+
+export const Obligation = __t.object("Obligation", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  accountId: __t.u64(),
+  kind: __t.string(),
+  label: __t.string(),
+  amountCents: __t.i64(),
+  cadence: __t.string(),
+  anchorDay: __t.i32(),
+  flexible: __t.bool(),
+  active: __t.bool(),
+  nessieId: __t.string(),
+});
+export type Obligation = __Infer<typeof Obligation>;
+
+export const Person = __t.object("Person", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  displayName: __t.string(),
+  role: __t.string(),
+  personaKey: __t.string(),
+  pinHash: __t.string(),
 });
 export type Person = __Infer<typeof Person>;
+
+export const Presence = __t.object("Presence", {
+  identity: __t.identity(),
+  householdId: __t.u64(),
+  personId: __t.u64(),
+  scenarioId: __t.u64(),
+  updatedAt: __t.timestamp(),
+});
+export type Presence = __Infer<typeof Presence>;
+
+export const Scenario = __t.object("Scenario", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  parentId: __t.u64(),
+  authorPersonId: __t.u64(),
+  agentKind: __t.string(),
+  title: __t.string(),
+  explanation: __t.string(),
+  status: __t.string(),
+  scope: __t.string(),
+  audiencePersonId: __t.u64(),
+  createdAt: __t.timestamp(),
+  computedAtDay: __t.i32(),
+});
+export type Scenario = __Infer<typeof Scenario>;
+
+export const ScenarioChange = __t.object("ScenarioChange", {
+  id: __t.u64(),
+  scenarioId: __t.u64(),
+  householdId: __t.u64(),
+  kind: __t.string(),
+  paramsJson: __t.string(),
+  label: __t.string(),
+});
+export type ScenarioChange = __Infer<typeof ScenarioChange>;
+
+export const SpendProfile = __t.object("SpendProfile", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  accountId: __t.u64(),
+  category: __t.string(),
+  dailyProb: __t.f64(),
+  logMean: __t.f64(),
+  logSd: __t.f64(),
+  weekendMult: __t.f64(),
+});
+export type SpendProfile = __Infer<typeof SpendProfile>;
+
+export const Txn = __t.object("Txn", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  accountId: __t.u64(),
+  day: __t.i32(),
+  amountCents: __t.i64(),
+  category: __t.string(),
+  merchantCode: __t.string(),
+  rawDescription: __t.string(),
+  nessieId: __t.string(),
+});
+export type Txn = __Infer<typeof Txn>;
+
+export const Vital = __t.object("Vital", {
+  id: __t.u64(),
+  scenarioId: __t.u64(),
+  householdId: __t.u64(),
+  scopePersonId: __t.u64(),
+  key: __t.string(),
+  value: __t.f64(),
+  band: __t.string(),
+  why: __t.string(),
+  mathJson: __t.string(),
+});
+export type Vital = __Infer<typeof Vital>;
+
