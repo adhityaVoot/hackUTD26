@@ -1,5 +1,13 @@
 import { schema, t, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
 import {
+  envValue,
+  requireAdmin,
+  requireCoOwner,
+  requireMember,
+  requireStepUp,
+  stepUpValidUntilMicros,
+} from './auth';
+import {
   account,
   agentLog,
   aiJob,
@@ -80,21 +88,6 @@ export default spacetimedb;
 
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 
-type EnvKey =
-  | 'AI_API_KEY'
-  | 'AI_BASE_URL'
-  | 'AI_MODEL'
-  | 'NESSIE_API_KEY'
-  | 'NESSIE_BASE_URL'
-  | 'ADMIN_CODE';
-
-/** Missing and empty env strings are both unset. spacetime.local.json uses "". */
-function envValue(ctx: Ctx, key: EnvKey): string | undefined {
-  const value = ctx.env[key];
-  if (value == null || value === '') return undefined;
-  return value;
-}
-
 function updateMemberPresence(ctx: Ctx, online: boolean): void {
   const row = ctx.db.member.identity.find(ctx.sender);
   if (!row) return;
@@ -118,3 +111,32 @@ export const onConnect = spacetimedb.clientConnected(ctx => {
 export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
   updateMemberPresence(ctx, false);
 });
+
+const myMemberRow = t.row('MemberSession', {
+  personId: t.u64().primaryKey(),
+  displayName: t.string(),
+  role: t.string(),
+  householdId: t.u64(),
+  stepUpValidUntilMicros: t.i64(),
+});
+
+/** Per-caller view. Empty until this identity has joined a household. */
+export const myMember = spacetimedb.view(
+  { name: 'my_member', public: true },
+  t.option(myMemberRow),
+  ctx => {
+    const member = ctx.db.member.identity.find(ctx.sender);
+    if (!member || member.personId === 0n) return undefined;
+    const person = ctx.db.person.id.find(member.personId);
+    if (!person) return undefined;
+    return {
+      personId: person.id,
+      displayName: person.displayName,
+      role: person.role,
+      householdId: member.householdId,
+      stepUpValidUntilMicros: stepUpValidUntilMicros(
+        member.stepUpAt.microsSinceUnixEpoch,
+      ),
+    };
+  },
+);

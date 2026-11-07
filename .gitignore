@@ -8,3 +8,4 @@ spacetime.local.json
 spacetime.*.local.json
 .env.local
 .env
+!.env.example

@@ -1,0 +1,47 @@
+.live-link {
+  position: fixed;
+  z-index: 40;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  align-items: center;
+  padding: 12px 16px;
+  border: 1px solid #d8b29755;
+  border-radius: 14px;
+  background: #101117f2;
+  color: #f4f1ed;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 16px 40px #0008;
+}
+
+.live-link strong {
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+
+.live-link span {
+  color: #c8c4d4;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e2b15a;
+  box-shadow: 0 0 10px #e2b15a88;
+}
+
+.live-link.connected .live-dot {
+  background: #b6d9bb;
+  box-shadow: 0 0 10px #b6d9bb88;
+}
+
+.live-link.error .live-dot {
+  background: #e08b7a;
+  box-shadow: 0 0 10px #e08b7a88;
+}

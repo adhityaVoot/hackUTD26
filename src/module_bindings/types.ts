@@ -226,6 +226,18 @@ export const Member = __t.object("Member", {
 });
 export type Member = __Infer<typeof Member>;
 
+export const MemberSession = __t.object("MemberSession", {
+  personId: __t.u64(),
+  displayName: __t.string(),
+  role: __t.string(),
+  householdId: __t.u64(),
+  stepUpValidUntilMicros: __t.i64(),
+});
+export type MemberSession = __Infer<typeof MemberSession>;
+
+export const MyMember = __t.object("MyMember", {});
+export type MyMember = __Infer<typeof MyMember>;
+
 export const NessieJob = __t.object("NessieJob", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
