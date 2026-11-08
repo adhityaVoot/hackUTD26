@@ -71,6 +71,12 @@
       "inviteCode",
       "name"
     ],
+    "mark_alert_read": [
+      "alertId"
+    ],
+    "open_negotiation": [
+      "topic"
+    ],
     "propose": [
       "scenarioId"
     ],
@@ -90,6 +96,9 @@
       "grantId",
       "durationSeconds"
     ],
+    "request_mediation": [
+      "negotiationId"
+    ],
     "revoke_grant": [
       "grantId"
     ],
@@ -103,6 +112,11 @@
     ],
     "set_pin": [
       "pin"
+    ],
+    "submit_position": [
+      "negotiationId",
+      "want",
+      "priority"
     ],
     "update_account": [
       "accountId",
@@ -137,17 +151,6 @@
       "accountId",
       "allowed"
     ],
-    "open_negotiation": [
-      "topic"
-    ],
-    "submit_position": [
-      "negotiationId",
-      "want",
-      "priority"
-    ],
-    "request_mediation": [
-      "negotiationId"
-    ],
     "stress_test": [
       "scenario"
     ],
@@ -165,6 +168,34 @@
     ],
     "propose_agent_plan": [
       "scenarioId"
+    ],
+    "rename_account": [
+      "accountId",
+      "nickname"
+    ],
+    "join_household_with_pin": [
+      "inviteCode",
+      "name",
+      "pin",
+      "createPin"
+    ],
+    "invite_family_member": [
+      "email",
+      "displayName",
+      "role"
+    ],
+    "accept_family_invitation": [
+      "invitationId",
+      "pin"
+    ],
+    "decline_family_invitation": [
+      "invitationId"
+    ],
+    "revoke_family_invitation": [
+      "invitationId"
+    ],
+    "resend_family_invitation": [
+      "invitationId"
     ],
     "request_account_review": [],
     "reopen_proposal": [
@@ -195,6 +226,9 @@
     "myVitals",
     "scenarioChanges",
     "myMoneyRequests",
-    "myAccountPrivacy"
+    "myAccountPrivacy",
+    "myInvitationSettings",
+    "householdInvitations",
+    "myFamilyInvitations"
   ]
 }

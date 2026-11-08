@@ -151,6 +151,12 @@ export const Approval = __t.object("Approval", {
 });
 export type Approval = __Infer<typeof Approval>;
 
+export const AuthenticatedEmail = __t.object("AuthenticatedEmail", {
+  identity: __t.identity(),
+  email: __t.string(),
+});
+export type AuthenticatedEmail = __Infer<typeof AuthenticatedEmail>;
+
 export const BacktestResult = __t.object("BacktestResult", {
   id: __t.u64(),
   runLabel: __t.string(),
@@ -228,6 +234,32 @@ export const DecisionMemory = __t.object("DecisionMemory", {
   createdAt: __t.timestamp(),
 });
 export type DecisionMemory = __Infer<typeof DecisionMemory>;
+
+export const FamilyInvitation = __t.object("FamilyInvitation", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  inviterPersonId: __t.u64(),
+  email: __t.string(),
+  displayName: __t.string(),
+  role: __t.string(),
+  status: __t.string(),
+  deliveryStatus: __t.string(),
+  attempt: __t.u32(),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+  lastSendAt: __t.timestamp(),
+});
+export type FamilyInvitation = __Infer<typeof FamilyInvitation>;
+
+export const FamilyInviteInbox = __t.object("FamilyInviteInbox", {
+  id: __t.u64(),
+  householdName: __t.string(),
+  inviterName: __t.string(),
+  displayName: __t.string(),
+  role: __t.string(),
+  expiresAt: __t.timestamp(),
+});
+export type FamilyInviteInbox = __Infer<typeof FamilyInviteInbox>;
 
 export const ForecastDay = __t.object("ForecastDay", {
   id: __t.u64(),
@@ -315,6 +347,12 @@ export const Household = __t.object("Household", {
 });
 export type Household = __Infer<typeof Household>;
 
+export const HouseholdAccess = __t.object("HouseholdAccess", {
+  householdId: __t.u64(),
+  invitationOnly: __t.bool(),
+});
+export type HouseholdAccess = __Infer<typeof HouseholdAccess>;
+
 export const HouseholdApprovals = __t.object("HouseholdApprovals", {});
 export type HouseholdApprovals = __Infer<typeof HouseholdApprovals>;
 
@@ -323,6 +361,9 @@ export type HouseholdCommitments = __Infer<typeof HouseholdCommitments>;
 
 export const HouseholdConsentLog = __t.object("HouseholdConsentLog", {});
 export type HouseholdConsentLog = __Infer<typeof HouseholdConsentLog>;
+
+export const HouseholdInvitations = __t.object("HouseholdInvitations", {});
+export type HouseholdInvitations = __Infer<typeof HouseholdInvitations>;
 
 export const HouseholdPeople = __t.object("HouseholdPeople", {});
 export type HouseholdPeople = __Infer<typeof HouseholdPeople>;
@@ -352,6 +393,22 @@ export const HouseholdSession = __t.object("HouseholdSession", {
   baselineScenarioId: __t.u64(),
 });
 export type HouseholdSession = __Infer<typeof HouseholdSession>;
+
+export const InvitationEmailJob = __t.object("InvitationEmailJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  invitationId: __t.u64(),
+  attempt: __t.u32(),
+});
+export type InvitationEmailJob = __Infer<typeof InvitationEmailJob>;
+
+export const InvitationSettings = __t.object("InvitationSettings", {
+  id: __t.u64(),
+  invitationOnly: __t.bool(),
+  emailDeliveryReady: __t.bool(),
+  email: __t.string(),
+});
+export type InvitationSettings = __Infer<typeof InvitationSettings>;
 
 export const InviteCode = __t.object("InviteCode", {
   inviteCode: __t.string(),
@@ -412,6 +469,9 @@ export type MyAlerts = __Infer<typeof MyAlerts>;
 export const MyDecisions = __t.object("MyDecisions", {});
 export type MyDecisions = __Infer<typeof MyDecisions>;
 
+export const MyFamilyInvitations = __t.object("MyFamilyInvitations", {});
+export type MyFamilyInvitations = __Infer<typeof MyFamilyInvitations>;
+
 export const MyForecast = __t.object("MyForecast", {});
 export type MyForecast = __Infer<typeof MyForecast>;
 
@@ -420,6 +480,9 @@ export type MyGrants = __Infer<typeof MyGrants>;
 
 export const MyHousehold = __t.object("MyHousehold", {});
 export type MyHousehold = __Infer<typeof MyHousehold>;
+
+export const MyInvitationSettings = __t.object("MyInvitationSettings", {});
+export type MyInvitationSettings = __Infer<typeof MyInvitationSettings>;
 
 export const MyInviteCode = __t.object("MyInviteCode", {});
 export type MyInviteCode = __Infer<typeof MyInviteCode>;
@@ -550,6 +613,13 @@ export const Person = __t.object("Person", {
   pinHash: __t.string(),
 });
 export type Person = __Infer<typeof Person>;
+
+export const PersonIdentity = __t.object("PersonIdentity", {
+  personId: __t.u64(),
+  identity: __t.identity(),
+  householdId: __t.u64(),
+});
+export type PersonIdentity = __Infer<typeof PersonIdentity>;
 
 export const Presence = __t.object("Presence", {
   identity: __t.identity(),

@@ -34,6 +34,7 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AcceptFamilyInvitationReducer from "./accept_family_invitation_reducer";
 import AddAccountReducer from "./add_account_reducer";
 import AddChangeReducer from "./add_change_reducer";
 import AddGoalReducer from "./add_goal_reducer";
@@ -49,20 +50,32 @@ import CloseNegotiationReducer from "./close_negotiation_reducer";
 import CreateGrantReducer from "./create_grant_reducer";
 import CreateHouseholdReducer from "./create_household_reducer";
 import CreateMoneyRequestReducer from "./create_money_request_reducer";
+import DebateDecisionReducer from "./debate_decision_reducer";
+import DeclineFamilyInvitationReducer from "./decline_family_invitation_reducer";
 import ForkReducer from "./fork_reducer";
+import InviteFamilyMemberReducer from "./invite_family_member_reducer";
 import JoinHouseholdReducer from "./join_household_reducer";
+import JoinHouseholdWithPinReducer from "./join_household_with_pin_reducer";
+import MarkAlertReadReducer from "./mark_alert_read_reducer";
 import OpenNegotiationReducer from "./open_negotiation_reducer";
 import ProposeReducer from "./propose_reducer";
+import ProposeAgentPlanReducer from "./propose_agent_plan_reducer";
 import RecordDecisionReducer from "./record_decision_reducer";
+import RegisterAuthenticatedEmailReducer from "./register_authenticated_email_reducer";
 import RemoveAccountReducer from "./remove_account_reducer";
 import RemoveChangeReducer from "./remove_change_reducer";
 import RemoveGoalReducer from "./remove_goal_reducer";
 import RemoveObligationReducer from "./remove_obligation_reducer";
+import RenameAccountReducer from "./rename_account_reducer";
 import RenewGrantReducer from "./renew_grant_reducer";
+import ReopenProposalReducer from "./reopen_proposal_reducer";
+import RequestAccountReviewReducer from "./request_account_review_reducer";
 import RequestBriefingReducer from "./request_briefing_reducer";
 import RequestHealthCheckReducer from "./request_health_check_reducer";
 import RequestMediationReducer from "./request_mediation_reducer";
+import ResendFamilyInvitationReducer from "./resend_family_invitation_reducer";
 import RespondMoneyRequestReducer from "./respond_money_request_reducer";
+import RevokeFamilyInvitationReducer from "./revoke_family_invitation_reducer";
 import RevokeGrantReducer from "./revoke_grant_reducer";
 import ScanOpportunitiesReducer from "./scan_opportunities_reducer";
 import SeedNemotronDemoReducer from "./seed_nemotron_demo_reducer";
@@ -89,6 +102,7 @@ import * as VerifyPinProcedure from "./verify_pin_procedure";
 import HouseholdApprovalsRow from "./household_approvals_table";
 import HouseholdCommitmentsRow from "./household_commitments_table";
 import HouseholdConsentLogRow from "./household_consent_log_table";
+import HouseholdInvitationsRow from "./household_invitations_table";
 import HouseholdPeopleRow from "./household_people_table";
 import HouseholdPresenceRow from "./household_presence_table";
 import HouseholdScenariosRow from "./household_scenarios_table";
@@ -98,9 +112,11 @@ import MyAgentLogRow from "./my_agent_log_table";
 import MyAiInsightsRow from "./my_ai_insights_table";
 import MyAlertsRow from "./my_alerts_table";
 import MyDecisionsRow from "./my_decisions_table";
+import MyFamilyInvitationsRow from "./my_family_invitations_table";
 import MyForecastRow from "./my_forecast_table";
 import MyGrantsRow from "./my_grants_table";
 import MyHouseholdRow from "./my_household_table";
+import MyInvitationSettingsRow from "./my_invitation_settings_table";
 import MyInviteCodeRow from "./my_invite_code_table";
 import MyMemberRow from "./my_member_table";
 import MyMoneyRequestsRow from "./my_money_requests_table";
@@ -136,6 +152,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, HouseholdConsentLogRow),
+  householdInvitations: __table({
+    name: 'household_invitations',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, HouseholdInvitationsRow),
   householdPeople: __table({
     name: 'household_people',
     indexes: [
@@ -199,6 +222,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyDecisionsRow),
+  myFamilyInvitations: __table({
+    name: 'my_family_invitations',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyFamilyInvitationsRow),
   myForecast: __table({
     name: 'my_forecast',
     indexes: [
@@ -220,6 +250,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyHouseholdRow),
+  myInvitationSettings: __table({
+    name: 'my_invitation_settings',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyInvitationSettingsRow),
   myInviteCode: __table({
     name: 'my_invite_code',
     indexes: [
@@ -287,6 +324,7 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("accept_family_invitation", AcceptFamilyInvitationReducer),
   __reducerSchema("add_account", AddAccountReducer),
   __reducerSchema("add_change", AddChangeReducer),
   __reducerSchema("add_goal", AddGoalReducer),
@@ -302,20 +340,32 @@ const reducersSchema = __reducers(
   __reducerSchema("create_grant", CreateGrantReducer),
   __reducerSchema("create_household", CreateHouseholdReducer),
   __reducerSchema("create_money_request", CreateMoneyRequestReducer),
+  __reducerSchema("debate_decision", DebateDecisionReducer),
+  __reducerSchema("decline_family_invitation", DeclineFamilyInvitationReducer),
   __reducerSchema("fork", ForkReducer),
+  __reducerSchema("invite_family_member", InviteFamilyMemberReducer),
   __reducerSchema("join_household", JoinHouseholdReducer),
+  __reducerSchema("join_household_with_pin", JoinHouseholdWithPinReducer),
+  __reducerSchema("mark_alert_read", MarkAlertReadReducer),
   __reducerSchema("open_negotiation", OpenNegotiationReducer),
   __reducerSchema("propose", ProposeReducer),
+  __reducerSchema("propose_agent_plan", ProposeAgentPlanReducer),
   __reducerSchema("record_decision", RecordDecisionReducer),
+  __reducerSchema("register_authenticated_email", RegisterAuthenticatedEmailReducer),
   __reducerSchema("remove_account", RemoveAccountReducer),
   __reducerSchema("remove_change", RemoveChangeReducer),
   __reducerSchema("remove_goal", RemoveGoalReducer),
   __reducerSchema("remove_obligation", RemoveObligationReducer),
+  __reducerSchema("rename_account", RenameAccountReducer),
   __reducerSchema("renew_grant", RenewGrantReducer),
+  __reducerSchema("reopen_proposal", ReopenProposalReducer),
+  __reducerSchema("request_account_review", RequestAccountReviewReducer),
   __reducerSchema("request_briefing", RequestBriefingReducer),
   __reducerSchema("request_health_check", RequestHealthCheckReducer),
   __reducerSchema("request_mediation", RequestMediationReducer),
+  __reducerSchema("resend_family_invitation", ResendFamilyInvitationReducer),
   __reducerSchema("respond_money_request", RespondMoneyRequestReducer),
+  __reducerSchema("revoke_family_invitation", RevokeFamilyInvitationReducer),
   __reducerSchema("revoke_grant", RevokeGrantReducer),
   __reducerSchema("scan_opportunities", ScanOpportunitiesReducer),
   __reducerSchema("seed_nemotron_demo", SeedNemotronDemoReducer),

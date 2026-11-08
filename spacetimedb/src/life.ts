@@ -1,3 +1,4 @@
+import {protectAuthenticatedHousehold} from './familyInvitations';
 import { SenderError } from 'spacetimedb/server';
 import { requireCoOwner, requireMember, requireStepUp, type Ctx } from './auth';
 import { isoToSimDay } from './engine/calendar';
@@ -78,6 +79,7 @@ export function createHousehold(ctx: Ctx, name: string, myDisplayName: string): 
     pinFailWindowStartMicros: 0n,
     pinLockedUntilMicros: 0n,
   });
+  protectAuthenticatedHousehold(ctx,household.id,person.id);
   const scenario = ctx.db.scenario.insert({
     id: 0n,
     householdId: household.id,
@@ -98,6 +100,7 @@ export function createHousehold(ctx: Ctx, name: string, myDisplayName: string): 
 
 export function addPerson(ctx: Ctx, displayName: string, role: string): void {
   const me = requireCoOwner(ctx);
+  if(ctx.db.householdAccess.householdId.find(me.household.id)?.invitationOnly)throw new SenderError('Invite this person by email. They join only after accepting.');
   const name = displayName.trim();
   if (name === '' || (role !== 'coowner' && role !== 'member')) {
     throw new SenderError('Name and role (coowner or member) are required');
@@ -364,4 +367,15 @@ export function setAiEnabled(ctx: Ctx, enabled: boolean): void {
     flagged: false,
     at: ctx.timestamp,
   });
+}
+
+/** Rename without resubmitting or overwriting financial fields. */
+export function renameAccount(ctx: Ctx, accountId: bigint, nickname: string): void {
+  const me = requireMember(ctx);
+  const account = ctx.db.account.id.find(accountId);
+  if (!account || account.householdId !== me.household.id) throw new SenderError('Account not found');
+  if (!(account.isJoint ? me.person.role === 'coowner' : account.ownerPersonId === me.person.id)) throw new SenderError('Only the account owner can rename this account');
+  const name = nickname.trim();
+  if (!name || name.length > 60) throw new SenderError('Use an account name between 1 and 60 characters');
+  ctx.db.account.id.update({...account,nickname:name});
 }

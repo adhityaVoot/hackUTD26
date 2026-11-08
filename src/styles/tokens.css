@@ -14,7 +14,7 @@
   --band-red-bg: #fde8e6;
   --online: #1b7a43;
   --offline: #b7b0a6;
-  --font: "Avenir Next", "Segoe UI", sans-serif;
+  --font: "FF DIN", sans-serif;
   --text: 1.125rem;
   --title: 1.85rem;
   --shadow: 0 10px 30px rgba(28, 25, 22, 0.08);
@@ -32,6 +32,6 @@ body {
   line-height: 1.45;
 }
 
-button, input { font: inherit; }
+button, input, textarea, select, option { font-family: "FF DIN", sans-serif; }
 button { cursor: pointer; }
 a { color: inherit; }
