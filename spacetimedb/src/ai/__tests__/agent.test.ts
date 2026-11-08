@@ -325,3 +325,35 @@ describe('pre-demo fixes', () => {
     expect(out.monthly_surplus_after).toBeGreaterThan(out.monthly_surplus_before); // ~$23/month of 22.99% interest
   });
 });
+
+describe('names in real household data (NemoTrial)', () => {
+  // Real data: full display names, first names in bill labels, names in account nicknames.
+  const realistic = () => {
+    const input = patelInput();
+    input.persons = input.persons.map(p => ({ ...p, displayName: `${p.displayName} Patel`, personaKey: p.displayName.toLowerCase() }));
+    input.obligations = input.obligations.map(o => (o.id === 103n ? { ...o, label: "Sam's car payment" } : o));
+    return input;
+  };
+
+  it('lets the question through and never blocks on names in bill labels', () => {
+    const http = fakeHttp([() => ({ status: 500, body: {} })]);
+    const s = newState('twin', buildSnapshot(realistic()), 'Can Priya and Sam afford a $3,200 Japan trip in March? Ask Mrs. Patel too.');
+    const out = runAgent(s, { http, primary: cfg, secondary: null });
+    expect(out.steps.some(x => x.step === 'pii_scan' && x.flagged)).toBe(false);
+    expect(http.sent).toHaveLength(1); // the request went out
+    const sent = JSON.stringify(http.sent[0]);
+    expect(sent).not.toMatch(/Priya|Sam\b|Maya|Patel/);
+    expect(sent).toContain('member A');
+    expect(sent).toContain('member B');
+  });
+
+  it('still blocks what cannot be redacted safely', () => {
+    const http = fakeHttp([() => ({ status: 500, body: {} })]);
+    const input = realistic();
+    input.goals = [{ ...input.goals[0], name: 'Fund 4417889921 escrow' }];
+    const s = newState('twin', buildSnapshot(input), 'Can we afford it?');
+    // Goal names with account-number-shaped text are dropped by the snapshot, so this still goes out clean.
+    runAgent(s, { http, primary: cfg, secondary: null });
+    expect(JSON.stringify(http.sent)).not.toContain('4417889921');
+  });
+});

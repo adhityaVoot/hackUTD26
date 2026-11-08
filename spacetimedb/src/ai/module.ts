@@ -227,7 +227,7 @@ function snapshotInputFor(tx: Ctx, hid: bigint, requester: bigint, today: number
     today,
     nowMicros: tx.timestamp.microsSinceUnixEpoch,
     requesterPersonId: requester,
-    persons: [...tx.db.person.householdId.filter(hid)].map(p => ({ id: p.id, displayName: p.displayName, role: p.role })),
+    persons: [...tx.db.person.householdId.filter(hid)].map(p => ({ id: p.id, displayName: p.displayName, role: p.role, personaKey: p.personaKey })),
     accounts: [...tx.db.account.householdId.filter(hid)],
     grants: [...tx.db.grant.householdId.filter(hid)].map(g => ({
       accountId: g.accountId,

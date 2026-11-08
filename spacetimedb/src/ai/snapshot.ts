@@ -19,6 +19,7 @@ export interface PersonRow {
   id: bigint;
   displayName: string;
   role: string;
+  personaKey?: string;
 }
 export interface AccountRow {
   id: bigint;
@@ -145,15 +146,24 @@ export function buildSnapshot(input: SnapshotInput, salt = 7): Snapshot {
   // Members: requester is always A so prompts read naturally ("A asked...").
   const persons = [...input.persons].sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : Number(a.id - b.id)));
   const memberToken = new Map<bigint, string>();
+  // Every way a person can be written: full display name, each part of it, and the persona key.
+  // A part shared by several members (the family surname) identifies no one and is removed.
+  const owners = new Map<string, Set<string>>();
   persons.forEach((p, i) => {
     const tok = String.fromCharCode(65 + i);
     memberToken.set(p.id, tok);
     map.members.set(tok, p.id);
-    if (p.displayName.trim()) {
-      map.names.push(p.displayName.trim());
-      map.nameToToken.set(p.displayName.trim().toLowerCase(), tok);
+    const full = p.displayName.trim().replace(/\s+/g, ' ');
+    const aliases = [full, ...full.split(' '), p.personaKey ?? '']
+      .map(a => a.replace(/[^\p{L}\p{N} '\u2019-]/gu, '').replace(/['\u2019]s$/i, '').trim())
+      .filter(a => a.length >= 2);
+    for (const a of aliases) {
+      const key = a.toLowerCase();
+      owners.set(key, (owners.get(key) ?? new Set()).add(tok));
+      map.names.push(a);
     }
   });
+  for (const [alias, toks] of owners) map.nameToToken.set(alias, toks.size === 1 ? [...toks][0] : '');
 
   // Visibility per account.
   const visibility = new Map<bigint, Visibility>();
