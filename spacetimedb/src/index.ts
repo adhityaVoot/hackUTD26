@@ -649,6 +649,15 @@ export const renewGrant = spacetimedb.reducer(
   (ctx, { grantId, durationSeconds }) => renewGrantRow(ctx, grantId, durationSeconds),
 );
 
+export const markAlertRead = spacetimedb.reducer({ alertId: t.u64() }, (ctx, { alertId }) => {
+  const me = requireMember(ctx);
+  const row = ctx.db.alert.id.find(alertId);
+  if (!row || row.householdId !== me.household.id || row.routedToPersonId !== me.person.id) {
+    throw new SenderError('Alert not found');
+  }
+  ctx.db.alert.id.update({ ...row, read: true });
+});
+
 // Coach, Health Check, Sentinel, Digital Twin, Ripple, Negotiation, Stress Test,
 // Life Event, Financial Memory, and Opportunity Radar. The existing setAiEnabled
 // reducer stays the co-owner kill switch.

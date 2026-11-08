@@ -71,6 +71,12 @@
       "inviteCode",
       "name"
     ],
+    "mark_alert_read": [
+      "alertId"
+    ],
+    "open_negotiation": [
+      "topic"
+    ],
     "propose": [
       "scenarioId"
     ],
@@ -90,6 +96,9 @@
       "grantId",
       "durationSeconds"
     ],
+    "request_mediation": [
+      "negotiationId"
+    ],
     "revoke_grant": [
       "grantId"
     ],
@@ -103,6 +112,11 @@
     ],
     "set_pin": [
       "pin"
+    ],
+    "submit_position": [
+      "negotiationId",
+      "want",
+      "priority"
     ],
     "update_account": [
       "accountId",
