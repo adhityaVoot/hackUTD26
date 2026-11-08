@@ -85,7 +85,7 @@ Subscribe to the views: `my_ai_insights`, `my_agent_log`, `my_decisions`, `my_ne
 ```sh
 cd spacetimedb
 npx vitest run                    # unit + agent loop (scripted Nemotron) + end-to-end module tests
-NVIDIA_API_KEY=nvapi-... npx vitest run src/ai/__tests__/live.nemotron.test.ts   # real Nemotron
+NEMOTRON_LIVE=1 npx vitest run src/ai/__tests__/live.nemotron.test.ts   # real Nemotron; key from .env
 ```
 
 `vitest.config.ts` stubs the `spacetime:sys` host imports so tests can load `index.ts`.

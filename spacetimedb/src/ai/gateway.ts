@@ -83,13 +83,13 @@ export function collectNumbers(value: unknown, into: Set<number> = new Set()): S
   return into;
 }
 
-function close(n: number, allowed: Set<number>): boolean {
+function close(n: number, allowed: Set<number>, isPercent: boolean, isThousands: boolean): boolean {
   if (allowed.has(n)) return true;
   for (const a of allowed) {
-    // Rounding the model may reasonably do: $1,234.56 -> $1,235 / $1.2k, 0.643 -> 64%.
+    // Rounding the model may reasonably do: $1,234.56 -> $1,235, 0.643 -> 64%, 3200 -> 3.2k.
     if (Math.abs(a - n) <= Math.max(1, Math.abs(a) * 0.01)) return true;
-    if (Math.abs(a * 100 - n) <= 1) return true; // fraction rendered as a percent
-    if (Math.abs(a) >= 1000 && Math.abs(a / 1000 - n) <= 0.1) return true; // "$3.2k"
+    if (isPercent && Math.abs(a) <= 1 && Math.abs(a * 100 - n) <= 1) return true;
+    if (isThousands && Math.abs(a) >= 1000 && Math.abs(a / 1000 - n) <= 0.1) return true;
   }
   return false;
 }
@@ -105,12 +105,14 @@ export interface NumberCheck {
  */
 export function checkNumbers(text: string, allowed: Set<number>): NumberCheck {
   const unsupported: number[] = [];
-  for (const m of text.match(NUMBER) ?? []) {
+  for (const match of text.matchAll(NUMBER)) {
+    const m = match[0];
     const n = Math.abs(parseNumber(m));
     if (!Number.isFinite(n)) continue;
     if (n <= 12 && Number.isInteger(n) && !m.includes('$')) continue;
     if (n >= 2024 && n <= 2035 && Number.isInteger(n)) continue;
-    if (!close(n, allowed)) unsupported.push(n);
+    const next = text[(match.index ?? 0) + m.length] ?? '';
+    if (!close(n, allowed, m.endsWith('%'), /k/i.test(next))) unsupported.push(n);
   }
   return { ok: unsupported.length === 0, unsupported };
 }

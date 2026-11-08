@@ -32,6 +32,7 @@ export interface AgentState {
   steps: AgentStep[];
   question: string;
   context: Record<string, unknown>; // feature extras (negotiation positions, ...)
+  lastSavings: Record<string, unknown> | null; // last required_monthly_savings result, for {savings.*} slots
 }
 
 export function newState(
@@ -57,6 +58,7 @@ export function newState(
     steps: [],
     question,
     context,
+    lastSavings: null,
   };
 }
 
@@ -290,6 +292,21 @@ export function getOpportunities(state: AgentState): Opportunity[] {
   return state.opportunities;
 }
 
+/** Models sometimes send levers as a JSON string, a single object, or under a misspelled key. */
+function leversArg(args: Record<string, unknown>): Lever[] {
+  let v = args.levers ?? args.leavers ?? args.changes ?? args.lever;
+  if (typeof v === 'string') {
+    const s = v.trim();
+    try {
+      v = JSON.parse(s.startsWith('[') ? s : `[${s}]`);
+    } catch {
+      return [];
+    }
+  }
+  if (v && !Array.isArray(v) && typeof v === 'object') v = [v];
+  return Array.isArray(v) ? (v as Lever[]) : [];
+}
+
 export function executeTool(state: AgentState, name: string, rawArgs: string | Record<string, unknown>): unknown {
   let args: Record<string, unknown> = {};
   if (typeof rawArgs === 'string') {
@@ -310,7 +327,7 @@ export function executeTool(state: AgentState, name: string, rawArgs: string | R
     case 'get_forecast_summary':
       return remember(state, forecastSummary(state));
     case 'simulate_scenario': {
-      const levers = Array.isArray(args.levers) ? (args.levers as Lever[]) : [];
+      const levers = leversArg(args);
       const { sim, errors } = runSim(state, String(args.title ?? 'Scenario'), levers);
       if (!sim) return { error: 'some levers were invalid; fix them and call again', details: errors };
       return remember(state, diffView(sim));
@@ -320,7 +337,8 @@ export function executeTool(state: AgentState, name: string, rawArgs: string | R
       const by = typeof args.by_date === 'string' ? args.by_date : '';
       const day = isoToDay(by);
       if (!Number.isFinite(target) || target <= 0 || day === null) return { error: 'target must be positive and by_date YYYY-MM-DD' };
-      return remember(state, { target, by: dayToLabel(day), per_month: requiredMonthly(target, state.snap.twin.today, day), current_monthly_surplus: state.baseline.monthlySurplus });
+      state.lastSavings = { target, by: dayToLabel(day), per_month: requiredMonthly(target, state.snap.twin.today, day), current_monthly_surplus: state.baseline.monthlySurplus };
+      return remember(state, { ...state.lastSavings, slot_hint: 'cite as {savings.per_month}' });
     }
     case 'search_memory': {
       const hits = searchMemory(state.memoryRows, String(args.query ?? state.question), state.snap.twin.today, state.snap.map.nameToToken);

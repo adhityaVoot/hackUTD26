@@ -36,6 +36,7 @@ export interface AgentOutcome {
 }
 
 const TOOL_RESULT_LIMIT = 7000;
+const MAX_SIMS = 4; // forks per request before the agent is asked to answer
 
 function log(state: AgentState, step: string, detail: string, flagged = false) {
   state.steps.push({ step, detail: detail.slice(0, 900), flagged });
@@ -46,7 +47,7 @@ function toolDocs(tools: ToolSpec[]): string {
 }
 
 export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
-  const maxSteps = deps.maxSteps ?? 8;
+  const maxSteps = deps.maxSteps ?? 10;
   const maxRetries = deps.maxRetries ?? 2;
   let promptTokens = 0;
   let completionTokens = 0;
@@ -104,7 +105,17 @@ export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
   let usedSecondary = false;
   let retries = 0;
 
+  let forcedFinal = false;
   for (let step = 0; step < maxSteps; step++) {
+    // Two steps before the limit (or once it has plenty of forks), stop exploring and answer.
+    if (!forcedFinal && (step >= maxSteps - 2 || state.sims.size >= MAX_SIMS)) {
+      forcedFinal = true;
+      messages.push({
+        role: 'user',
+        content: `Tool budget used. Do not call any more tools. Reply now with only the final JSON${protocolMode ? ' as {"final": ...}' : ''}, citing these sim_ids: ${[...state.sims.keys()].join(', ') || 'none'}.`,
+      });
+      log(state, 'plan', `asked for the final answer after ${state.sims.size} fork(s)`);
+    }
     // Scan what we author or forward; provider-generated tool_call ids are excluded (they are
     // opaque hex/digit strings that would trip the identifier patterns).
     // The system prompt is ours and carries no household data, so it is not scanned.
@@ -119,7 +130,7 @@ export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
     if (step === 0) log(state, 'pii_scan', 'passed: no names, account numbers, emails or phone numbers');
 
     const res = chat(deps.http, cfg, messages, {
-      tools: protocolMode ? undefined : tools,
+      tools: protocolMode || forcedFinal ? undefined : tools,
       maxTokens: 1600,
       temperature: 0.2,
       timeout: deps.timeout,
@@ -155,7 +166,7 @@ export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
         const out = executeTool(state, call.function.name, call.function.arguments);
         const isSim = call.function.name === 'simulate_scenario';
         const err = (out as any)?.error;
-        log(state, isSim ? 'simulate' : 'tool_call', `${call.function.name}${isSim ? ` "${safeTitle(call.function.arguments)}"` : ''} -> ${err ? `error: ${err} ${JSON.stringify((out as any).details ?? '')}` : isSim ? summarizeSim(out) : 'ok'}`, !!err);
+        log(state, isSim ? 'simulate' : 'tool_call', `${call.function.name}${isSim ? ` "${safeTitle(call.function.arguments)}"` : ''} -> ${err ? `error: ${err} ${JSON.stringify((out as any).details ?? '')} args=${call.function.arguments.slice(0, 300)}` : isSim ? summarizeSim(out) : 'ok'}`, !!err);
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(out).slice(0, TOOL_RESULT_LIMIT) });
       }
       continue;

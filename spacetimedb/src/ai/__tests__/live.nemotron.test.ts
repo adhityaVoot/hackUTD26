@@ -1,6 +1,6 @@
 // Live check against NVIDIA's hosted Nemotron. Skipped unless NVIDIA_API_KEY is set.
 //
-//   NVIDIA_API_KEY=nvapi-... npx vitest run src/ai/__tests__/live.nemotron.test.ts
+//   npm run test:live        (key from spacetimedb/.env or NVIDIA_API_KEY)
 //
 // Optional: NEMOTRON_MODEL, NEMOTRON_BASE_URL. Runs the same agent loop the procedure runs,
 // over curl (synchronous, like ctx.http.fetch), on the Patel fixture.
@@ -60,7 +60,10 @@ const cases: [FeatureKind, string, Record<string, unknown>?][] = [
   ['negotiation', 'Spring spending', { topic: 'Spring spending', positions: [{ member: 'A', want: 'Send Maya $350 a month for rent through May', priority: 4 }, { member: 'B', want: 'Japan trip in March, about $3,200', priority: 3 }] }],
 ];
 
-describe.skipIf(!KEY)('live Nemotron', () => {
+// Opt-in only, so ordinary test runs never spend API credits.
+const LIVE = !!KEY && process.env.NEMOTRON_LIVE === '1';
+
+describe.skipIf(!LIVE)('live Nemotron', () => {
   for (const [feature, q, ctx] of cases) {
     it(
       feature,

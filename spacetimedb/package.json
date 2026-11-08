@@ -5,7 +5,8 @@
   "scripts": {
     "build": "spacetime build",
     "publish": "spacetime publish",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:live": "NEMOTRON_LIVE=1 vitest run src/ai/__tests__/live.nemotron.test.ts"
   },
   "keywords": [],
   "author": "",

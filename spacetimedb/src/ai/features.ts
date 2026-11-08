@@ -52,7 +52,7 @@ function base(state: AgentState, title: string, answer: string, source: InsightR
 // The model writes {sim_1.lowest_cash_after}, {sim_1.goal_2.shift_days} or
 // {now.peak_overdraft_risk_pct_next_30_days}; the engine fills them with exact values.
 
-const SLOT = /\{(sim_\d+|now)\.([a-z0-9_]+)(?:\.([a-z0-9_]+))?\}/g;
+const SLOT = /\{(sim_\d+|now|savings)\.([a-z0-9_]+)(?:\.([a-z0-9_]+))?\}/g;
 
 function formatSlot(key: string, v: unknown): string {
   if (typeof v !== 'number') return String(v);
@@ -67,6 +67,7 @@ export function fillSlots(text: string, state: AgentState): { text: string; unkn
   const out = text.replace(SLOT, (m, src: string, a: string, b?: string) => {
     let obj: Record<string, unknown> | undefined;
     if (src === 'now') obj = now;
+    else if (src === 'savings') obj = state.lastSavings ?? undefined;
     else {
       const sim = state.sims.get(src);
       obj = sim ? (diffView(sim) as Record<string, unknown>) : undefined;
@@ -104,12 +105,15 @@ class Checker {
       if (required) this.errors.push(`${field} is required`);
       return '';
     }
-    const raw = v.trim().slice(0, max);
+    const raw = v.trim();
     const nc = checkNumbers(raw.replace(SLOT, ''), this.state.allowedNumbers);
     if (!nc.ok) this.errors.push(`${field} uses numbers no tool returned (${nc.unsupported.slice(0, 4).join(', ')}); use slots like {sim_1.lowest_cash_after} instead`);
     const filled = fillSlots(raw, this.state);
     if (filled.unknown.length) this.errors.push(`${field} has unknown slots ${filled.unknown.slice(0, 3).join(', ')}`);
-    return filled.text;
+    const stray = filled.text.match(/\{[^}]*\}?/);
+    if (stray && !filled.unknown.length) this.errors.push(`${field} has an unsupported placeholder ${stray[0].slice(0, 40)}; use {sim_N.field}, {now.field} or {savings.field}`);
+    // Truncate after filling, at a word boundary, so a slot is never cut in half.
+    return filled.text.length <= max ? filled.text : `${filled.text.slice(0, filled.text.lastIndexOf(' ', max - 1))}...`;
   }
   texts(field: string, v: unknown, maxItems = 6): string[] {
     if (!Array.isArray(v)) return [];
@@ -211,6 +215,10 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
         severity: ['mild', 'expected', 'severe'].includes(x?.severity) ? x.severity : 'expected',
       }));
       if (!scenarios.length) c.errors.push('scenarios must list at least one simulated scenario');
+      const fingerprints = scenarios.filter((s: any) => s.sim).map((s: any) => s.sim.levers.map(describeLever).join('|'));
+      if (new Set(fingerprints).size < fingerprints.length) {
+        c.errors.push('mild, expected and severe must be different simulations (change the duration, percent or amount), not the same sim reused');
+      }
       const weakest = c.text('weakest_point', parsed.weakest_point, true, 300);
       const mitigations = (Array.isArray(parsed.mitigations) ? parsed.mitigations : []).slice(0, 3).map((x: any, i: number) => ({
         sim: c.sim(`mitigations[${i}].sim_id`, x?.sim_id, false),
@@ -388,7 +396,7 @@ export function fallback(state: AgentState, reason: string): InsightResult {
         return r;
       }
       // Mitigation: pause every visible flexible, non-essential bill for the stress window.
-      const flex = t.obligations.filter(o => o.visible && o.flexible && ['subscription', 'utility', 'card_payment', 'transfer'].includes(o.kind));
+      const flex = t.obligations.filter(o => o.visible && o.flexible && ['subscription', 'utility'].includes(o.kind));
       const startIso = (expected.p.levers[0] as any).start_date ?? (expected.p.levers[0] as any).date;
       const mitig = flex.length
         ? runSim(state, 'Pause flexible bills', [...expected.p.levers, ...flex.slice(0, 4).map(o => ({ kind: 'pause_obligation' as const, obligation: o.token, start_date: startIso, end_date: (expected.p.levers[0] as any).end_date, label: `Pause ${o.label}` }))]).sim

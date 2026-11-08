@@ -6,7 +6,7 @@
 // procedure call. When the Monte Carlo engine lands, Sentinel and the Vitals Board should use
 // it; the agent can keep using this for quick what-ifs or delegate to it.
 
-import { dayToLabel, etaLabel, isoToDay, NO_ETA, occursOn, perMonth } from './dates';
+import { dayToIso, dayToLabel, etaLabel, isoToDay, NO_ETA, occursOn, perMonth } from './dates';
 import type {
   Band,
   ForecastPoint,
@@ -64,9 +64,14 @@ function num(v: unknown, name: string): number {
 
 function day(data: TwinData, iso: unknown, name: string, optional = false): number {
   if ((iso === undefined || iso === null || iso === '') && optional) return -1;
-  if (typeof iso !== 'string') throw new LeverError(`${name} must be an ISO date (YYYY-MM-DD)`);
-  const d = isoToDay(iso);
-  if (d === null) throw new LeverError(`${name} "${iso}" is not an ISO date (YYYY-MM-DD)`);
+  if (typeof iso !== 'string' || !iso) throw new LeverError(`${name} is missing; give it as YYYY-MM-DD`);
+  // Accept 2026-11-14T00:00:00Z and 2026/11/14 too.
+  const d = isoToDay(iso.trim().slice(0, 10).replace(/\//g, '-'));
+  if (d === null) throw new LeverError(`${name} "${iso}" is not a date; use YYYY-MM-DD`);
+  if (d < data.today - 1 && name !== 'end_date') {
+    const nextYear = `${Number(iso.slice(0, 4)) + 1}${iso.trim().slice(4, 10)}`;
+    throw new LeverError(`${name} ${iso} is in the past; today is ${dayToIso(data.today)}. Did you mean ${nextYear}?`);
+  }
   // Dates in the past snap to tomorrow: "this month" questions are common.
   const snapped = Math.max(d, data.today + 1);
   if (snapped > data.today + MAX_LEVER_DAYS) throw new LeverError(`${name} is more than 2 years out`);
@@ -107,15 +112,36 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
   };
   const visibleAccount = (tok: unknown, name: string) => {
     const a = data.accounts.find(x => x.token === tok);
-    if (!a || a.visibility === 'signal') throw new LeverError(`${name} "${String(tok)}" is not an account you can see`);
+    if (!a || a.visibility === 'signal') {
+      const ok = data.accounts.filter(x => x.visibility !== 'signal').map(x => `${x.token} (${x.kind})`).join(', ');
+      const t = String(tok);
+      const hint = t.startsWith('goal')
+        ? ' Goals are funded from monthly surplus, not by transfer; to save toward one, transfer to a savings account or cut a recurring cost.'
+        : /^(member|[A-Z]$)/.test(t)
+          ? " To send money to a member, use one_time or recurring_change (category 'other') instead of transfer."
+          : '';
+      throw new LeverError(`${name} "${t}" is not an account token; use one of: ${ok}.${hint}`);
+    }
     return a;
   };
   const visibleObligation = (tok: unknown) => {
     const o = data.obligations.find(x => x.token === tok);
-    if (!o || !o.visible) throw new LeverError(`obligation "${String(tok)}" is not one you can see`);
+    if (!o || !o.visible) {
+      const ok = data.obligations.filter(x => x.visible).map(x => `${x.token} (${x.label})`).join(', ');
+      throw new LeverError(`obligation "${String(tok)}" is not a bill token; use one of: ${ok}`);
+    }
     return o;
   };
-  const l = lever as Record<string, unknown>;
+  const l = { ...(lever as Record<string, unknown>) };
+  // Models mix up date field names; accept either.
+  l.date ??= l.start_date;
+  l.start_date ??= l.date;
+  // "Pay it down" / "move it" / "pause it" without a date means: starting tomorrow.
+  if (['transfer', 'extra_payment', 'pause_obligation'].includes(lever.kind)) {
+    l.date ??= dayToIso(data.today + 1);
+    l.start_date ??= l.date;
+  }
+  if (lever.kind === 'recurring_change' || (lever.kind === 'income_change' && l.percent === undefined)) l.monthly_delta ??= l.amount;
   switch (lever.kind) {
     case 'one_time': {
       if (l.account !== undefined && l.account !== '') visibleAccount(l.account, 'account');
@@ -135,7 +161,7 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
       }
       const start = day(data, l.start_date, 'start_date');
       const end = day(data, l.end_date, 'end_date', true);
-      if (end !== -1 && end <= start) throw new LeverError('end_date must be after start_date');
+      if (end !== -1 && end <= start) throw new LeverError(`end_date ${String(l.end_date)} must be after start_date ${dayToIso(start)}`);
       return {
         ...base,
         label: cleanLabel(l.label, `${category} change`),
@@ -150,7 +176,7 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
       if (!member) throw new LeverError(`member must be one of ${data.members.map(m => m.token).join(', ')}`);
       const start = day(data, l.start_date, 'start_date');
       const end = day(data, l.end_date, 'end_date', true);
-      if (end !== -1 && end <= start) throw new LeverError('end_date must be after start_date');
+      if (end !== -1 && end <= start) throw new LeverError(`end_date ${String(l.end_date)} must be after start_date ${dayToIso(start)}`);
       const hasPct = l.percent !== undefined && l.percent !== null;
       const pct = hasPct ? num(l.percent, 'percent') : 0;
       if (hasPct && (pct < -100 || pct > 200)) throw new LeverError('percent must be between -100 and 200');
@@ -203,6 +229,9 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
     case 'pause_obligation': {
       const o = visibleObligation(l.obligation);
       if (o.kind === 'income') throw new LeverError('use income_change for income');
+      if (['mortgage', 'auto_loan', 'card_payment', 'personal_loan', 'loan', 'insurance', 'rent', 'tuition'].includes(o.kind)) {
+        throw new LeverError(`${o.label} can't be skipped (it is a ${o.kind.replace('_', ' ')}); use move_obligation to shift it after payday instead`);
+      }
       const start = day(data, l.start_date, 'start_date');
       const end = day(data, l.end_date, 'end_date', true);
       return {

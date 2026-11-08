@@ -80,7 +80,7 @@ describe('twin projection', () => {
     const joint = snap.twin.accounts.find(a => a.kind === 'checking' && a.owner === 'joint')!;
     expect(() => resolveLever(snap.twin, { kind: 'transfer', from: sig.token, to: joint.token, amount: 100, date: '2026-11-20' })).toThrow(LeverError);
     expect(() => resolveLever(snap.twin, { kind: 'one_time', amount: 99999999, date: '2026-11-20', label: 'x' })).toThrow(/limit/);
-    expect(() => resolveLever(snap.twin, { kind: 'one_time', amount: 10, date: 'next tuesday', label: 'x' })).toThrow(/ISO/);
+    expect(() => resolveLever(snap.twin, { kind: 'one_time', amount: 10, date: 'next tuesday', label: 'x' })).toThrow(/not a date/);
   });
 });
 
@@ -158,5 +158,34 @@ describe('thinking control', () => {
     expect(sent[1]).toMatchObject({ chat_template_kwargs: { enable_thinking: true }, reasoning_budget: 4096, max_tokens: 8192 });
     expect(sent[2].chat_template_kwargs).toBeUndefined();
     expect(sent[2].messages[0].content).toBe('/no_think\nsys');
+  });
+});
+
+describe('number check strictness', () => {
+  it('applies the percent and thousands allowances only when the text says % or k', () => {
+    const allowed = collectNumbers({ day: 'Nov 21', risk: 0.64, cost: 3200 });
+    expect(checkNumbers('Saves $2,100 a month.', allowed).ok).toBe(false);
+    expect(checkNumbers('Risk is 64%.', allowed).ok).toBe(true);
+    expect(checkNumbers('About 3.2k.', allowed).ok).toBe(true);
+    expect(checkNumbers('About 3.2 of them.', allowed).ok).toBe(false);
+  });
+});
+
+describe('live-run fixes', () => {
+  const snap = buildSnapshot(patelInput());
+  it('accepts levers sent as a JSON string or under a misspelled key', () => {
+    const s = newState('ripple', snap, 'x');
+    const lever = { kind: 'one_time', amount: 100, date: '2026-12-01', label: 'x' };
+    expect((executeTool(s, 'simulate_scenario', { title: 'a', levers: JSON.stringify(lever) }) as any).sim_id).toBe('sim_1');
+    expect((executeTool(s, 'simulate_scenario', { title: 'b', leavers: [lever] }) as any).sim_id).toBe('sim_2');
+  });
+  it('defaults dates for paydowns, refuses skipping debt payments, and hints at the right lever', () => {
+    const card = snap.twin.accounts.find(a => a.kind === 'credit_card')!;
+    expect(resolveLever(snap.twin, { kind: 'extra_payment', loan: card.token, amount: 500 } as any).day).toBe(TODAY + 1);
+    const visa = snap.twin.obligations.find(o => o.kind === 'card_payment')!;
+    expect(() => resolveLever(snap.twin, { kind: 'pause_obligation', obligation: visa.token, start_date: '2026-12-01' })).toThrow(/can't be skipped/);
+    const joint = snap.twin.accounts.find(a => a.kind === 'checking')!;
+    expect(() => resolveLever(snap.twin, { kind: 'transfer', from: joint.token, to: 'goal_2', amount: 5, date: '2026-12-01' })).toThrow(/funded from monthly surplus/);
+    expect(() => resolveLever(snap.twin, { kind: 'one_time', amount: 5, date: '2026-06-01', label: 'x' })).toThrow(/Did you mean 2027-06-01/);
   });
 });
