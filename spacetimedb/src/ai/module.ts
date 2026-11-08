@@ -194,9 +194,9 @@ function loadJob(tx: Ctx, runId: bigint): Loaded | null {
       .sort((a, b) => Number(a.id - b.id));
     for (const i of turns.slice(-3)) {
       // Keep what the coach asked or suggested, so "that budget" or an answer to its questions makes sense next turn.
-      const r = JSON.parse(i.resultJson) as { answer?: string; followUp?: string; extra?: { questions?: string[] } };
+      const r = JSON.parse(i.resultJson) as { kind?: string; answer?: string; followUp?: string; extra?: { questions?: string[] } };
       const asked = [...(r.extra?.questions ?? []), r.followUp ?? ''].filter(Boolean).join(' ');
-      history.push({ question: i.question, answer: `${r.answer ?? ''}${asked ? ` ${asked}` : ''}`.trim() });
+      history.push({ question: i.question, answer: `${r.answer ?? ''}${asked ? ` ${asked}` : ''}`.trim(), clarified: r.kind === 'clarify' });
     }
   }
   const nessieKey = envValue(tx, 'NESSIE_API_KEY');

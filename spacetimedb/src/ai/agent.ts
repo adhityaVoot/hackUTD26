@@ -246,6 +246,7 @@ function summarizeSim(out: any): string {
 export interface CoachTurn {
   question: string;
   answer: string;
+  clarified?: boolean; // the coach asked clarifying questions on this turn
 }
 
 export interface Route {
@@ -264,9 +265,11 @@ export interface Route {
 export function routeCoach(message: string, history: CoachTurn[], names: Map<string, string>, deps: AgentDeps): Route {
   const steps: AgentStep[] = [];
   const clean = (s: string) => sanitizeUserText(s, names, 600);
+  // Ask at most once per conversation: after the member answers, plan with what they gave.
+  const alreadyAsked = history.some(h => h.clarified);
   const rules = (why: string): Route => {
     const feature = classifyMessage(message);
-    const clarify = clarifyQuestions(clean(message), history.map(h => ({ question: clean(h.question), answer: h.answer })));
+    const clarify = alreadyAsked ? null : clarifyQuestions(clean(message), history.map(h => ({ question: clean(h.question), answer: h.answer })));
     steps.push({ step: 'route', detail: clarify ? `rule-based: asking ${clarify.questions.length} question(s) before planning (${why})` : `rule-based routing to ${feature} (${why})`, flagged: false });
     return { feature, request: clean(message), clarify: clarify ?? undefined, steps, promptTokens: 0, completionTokens: 0 };
   };
@@ -287,7 +290,10 @@ export function routeCoach(message: string, history: CoachTurn[], names: Map<str
   const usage = { promptTokens: res.promptTokens, completionTokens: res.completionTokens };
   // A single purchase ("I want a Rolex") is looked up and priced, not interrogated.
   const singlePurchase = /\b(buy|purchase|get|afford|want|wanna)\b/i.test(message) && !/\b(trip|travel|vacation|holiday|honeymoon|wedding|move|moving|renovat|plan)\b/i.test(message);
-  if (parsed.needs_clarification === true && !singlePurchase) {
+  if (alreadyAsked && parsed.needs_clarification === true) {
+    steps.push({ step: 'route', detail: 'already asked once in this conversation; planning with the answers given', flagged: false });
+  }
+  if (parsed.needs_clarification === true && !singlePurchase && !alreadyAsked) {
     const questions = (Array.isArray(parsed.questions) ? parsed.questions : [])
       .filter((x): x is string => typeof x === 'string' && x.trim().length > 3)
       // The app already knows the household's money; never ask for it.

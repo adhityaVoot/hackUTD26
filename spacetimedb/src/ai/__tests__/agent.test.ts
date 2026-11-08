@@ -475,3 +475,15 @@ describe('asks before planning when the request is vague', () => {
     expect(r.feature).toBe('life_event');
   });
 });
+
+describe('asks at most once', () => {
+  it('after one round of questions it plans instead of asking again, even if the model wants to', () => {
+    const reAsk = fakeHttp([() => ({ body: final({ workflow: 'life_event', request: 'Plan a trip to Kenya and Vietnam', needs_clarification: true, message: 'Great!', questions: ['Which countries and cities are you considering?', 'How long?'] }) })]);
+    const history = [{ question: 'Plan a trip to a couple countries in Africa and Asia', answer: 'Happy to help! Which countries?', clarified: true }];
+    const r = routeCoach('Kenya and Vietnam', history, new Map(), { http: reAsk, primary: cfg, secondary: null });
+    expect(r.clarify).toBeUndefined();
+    expect(r.feature).toBe('life_event');
+    const rules = routeCoach('Kenya and Vietnam', history, new Map(), { http: reAsk, primary: null, secondary: null });
+    expect(rules.clarify).toBeUndefined();
+  });
+});
