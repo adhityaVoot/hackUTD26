@@ -121,6 +121,23 @@ function levelOf(grant: GrantRow): Visibility {
 }
 
 /**
+ * An adult owner who shares an account at signal level has chosen aggregate-only sharing:
+ * the account still counts toward household vitals and forecasts, but its rows stay private,
+ * including from co-owners.
+ */
+export function isSignalOnly(ctx: Pick<Ctx, 'db'>, accountId: bigint): boolean {
+  for (const grant of ctx.db.grant.accountId.filter(accountId)) {
+    if (grant.status === 'active' && grant.level === 'signal') return true;
+  }
+  return false;
+}
+
+/** Household aggregates may include an account the viewer can see in full or one shared at signal level. */
+function countsTowardHousehold(ctx: Ctx, me: MemberRow, account: AccountRow): boolean {
+  return canSee(ctx, me, account) === 'full' || (me.kind !== 'banker' && isSignalOnly(ctx, account.id));
+}
+
+/**
  * Joint accounts are fully visible to people in the household.
  * Bankers get summary only when an active banker grant names their identity.
  * Signal grants do not reveal rows.
@@ -138,7 +155,9 @@ export function canSee(ctx: Ctx, me: MemberRow, account: AccountRow): Visibility
   if(me.kind!=='banker'&&viewer?.role==='coowner'){
     const h=ctx.db.household.id.find(account.householdId);
     const minor=isMinor(ctx.db.ageProfile.personId.find(account.ownerPersonId)?.birthDate,simDayToIso(h?.simDay??0));
-    return minor||!ctx.db.accountPrivacy.accountId.find(account.id)?.ownerAccessDisabled?'full':'none';
+    if(minor)return 'full';
+    if(ctx.db.accountPrivacy.accountId.find(account.id)?.ownerAccessDisabled||isSignalOnly(ctx,account.id))return 'none';
+    return 'full';
   }
   const grant = activeGrants(ctx, account.id).find(row => grantApplies(ctx, me, row));
   if (!grant) return 'none';
@@ -327,7 +346,7 @@ export function readMyForecast(ctx: Ctx) {
     if (canSee(ctx, me, account) === 'full') full.add(account.id);
   }
   return listed(ctx.db.forecastDay.householdId.filter(me.householdId)).filter(
-    row => allowed.has(row.scenarioId) && (row.accountId === 0n ? [...ctx.db.account.householdId.filter(me.householdId)].every(a=>full.has(a.id)) : full.has(row.accountId)),
+    row => allowed.has(row.scenarioId) && (row.accountId === 0n ? [...ctx.db.account.householdId.filter(me.householdId)].every(a=>full.has(a.id)||countsTowardHousehold(ctx,me,a)) : full.has(row.accountId)),
   );
 }
 
@@ -338,7 +357,7 @@ export function readMyVitals(ctx: Ctx) {
   return listed(ctx.db.vital.householdId.filter(me.householdId)).filter(
     row =>
       allowed.has(row.scenarioId) &&
-      (row.scopePersonId === me.personId || (row.scopePersonId === 0n && [...ctx.db.account.householdId.filter(me.householdId)].every(a=>canSee(ctx,me,a)==='full'))),
+      (row.scopePersonId === me.personId || (row.scopePersonId === 0n && [...ctx.db.account.householdId.filter(me.householdId)].every(a=>countsTowardHousehold(ctx,me,a)))),
   );
 }
 

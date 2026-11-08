@@ -8,8 +8,8 @@ import { lookupInformation, priceFromPassages } from './lookup';
 import { DISCLAIMER } from './prompts';
 import { describeLever, diffView, forecastSummary, getOpportunities, runSim, type AgentState, type Sim } from './tools';
 import { searchMemory } from './memory';
-import { GOAL_HORIZON_DAYS, requiredMonthly } from './twin';
-import type { FeatureKind, Highlight, InsightResult, ScenarioDraft, TwinDiff } from './types';
+import { GOAL_HORIZON_DAYS, requiredMonthly, resolveLever, simulate } from './twin';
+import type { FeatureKind, Highlight, InsightResult, Lever, ScenarioDraft, TwinAccount, TwinDiff } from './types';
 
 const $ = (n: number) => `${n < 0 ? '-' : ''}$${Math.round(Math.abs(n)).toLocaleString('en-US')}`;
 const VITAL_LABEL: Record<string, string> = {
@@ -321,18 +321,24 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
     case 'briefing': {
       const sentinel = state.context.mode === 'sentinel';
       const upcoming = c.texts('upcoming', parsed.upcoming, 5);
-      const watch = c.texts('watch_out', parsed.watch_out, 3);
+      const engineWatch = crunchWatchLine(state);
+      const watch = [...(engineWatch ? [engineWatch] : []), ...c.texts('watch_out', parsed.watch_out, 3).filter(w => !(engineWatch && /^none\b|above (the )?buffer|0% (peak )?overdraft/i.test(w)))].slice(0, 3);
       // If Nemotron simulated fixes but didn't name one, the engine picks the one with the lowest risk.
       const engineFix = [...state.sims.values()].filter(s => s.diff.crunchAfter < s.diff.crunchBefore).sort((a, b) => a.diff.crunchAfter - b.diff.crunchAfter)[0];
-      const fix = state.sims.has(parsed.fix_sim) ? c.sim('fix_sim', parsed.fix_sim) : engineFix ?? c.sim('fix_sim', parsed.fix_sim, sentinel);
-      const fixWhy = c.text('fix_why', parsed.fix_why, false, 300);
+      let fix = state.sims.has(parsed.fix_sim) ? c.sim('fix_sim', parsed.fix_sim) : engineFix ?? (sentinel ? bestSentinelFix(state) : undefined) ?? c.sim('fix_sim', parsed.fix_sim, sentinel);
+      // During a crunch, prefer the engine's top-up when the model's pick leaves the risk higher.
+      const topUp = state.baseline.peakCrunchRisk > 0.25 ? topUpFix(state) : undefined;
+      let fixFromEngine = false;
+      if (topUp && (!fix || topUp.diff.crunchAfter < fix.diff.crunchAfter)) { fix = topUp; fixFromEngine = true; }
+      const fixWhy = fixFromEngine ? '' : c.text('fix_why', parsed.fix_why, false, 300);
       if (sentinel && fix && fix.diff.crunchAfter >= fix.diff.crunchBefore) c.errors.push('fix_sim must lower overdraft risk; simulate a different fix');
       if (upcoming.length) r.sections.push({ heading: 'Coming up', items: upcoming });
       if (watch.length) r.sections.push({ heading: 'Watch out', items: watch });
       if (fix) {
         r.scenarios = [draft(fix)];
         r.highlights = highlightsFromDiff(fix.diff);
-        r.sections.push({ heading: sentinel ? 'Suggested fix' : 'Worth doing', items: [`${fix.title}: ${fixWhy || summaryLine(fix)}`] });
+        r.sections.push({ heading: sentinel || fixFromEngine ? 'Suggested fix' : 'Worth doing', items: [`${fix.title}: ${fixWhy || summaryLine(fix)}`] });
+        if (fixFromEngine) r.answer = `${engineWatch} ${fix.title} keeps ${state.baseline.accountRisk.filter(x => x.peak > 0.25).length > 1 ? 'both above their buffers' : 'it above the buffer'}: overdraft risk ${fix.diff.crunchBefore}% to ${fix.diff.crunchAfter}%.`;
       } else {
         r.highlights = briefingHighlights(state);
       }
@@ -573,12 +579,12 @@ export function fallback(state: AgentState, reason: string): InsightResult {
       return r;
     }
     case 'briefing': {
-      const sentinel = state.context.mode === 'sentinel';
       const f = state.baseline;
+      const sentinel = state.context.mode === 'sentinel' || f.peakCrunchRisk > 0.25;
       const r = base(state, sentinel ? 'Crunch ahead' : 'Household briefing', '', 'fallback');
       const upcoming = upcomingBills(state, 5);
       r.answer = sentinel
-        ? `Overdraft risk peaks at ${Math.round(f.peakCrunchRisk * 100)}% on ${dayToLabel(f.peakCrunchDay)}.`
+        ? crunchWatchLine(state) || `Overdraft risk peaks at ${Math.round(f.peakCrunchRisk * 100)}% on ${dayToLabel(f.peakCrunchDay)}.`
         : `Over the next 60 days household cash stays at or above ${$(f.minBalance)}, with overdraft risk at ${Math.round(f.peakCrunchRisk * 100)}%.`;
       r.sections.push({ heading: 'Coming up', items: upcoming });
       if (sentinel) {
@@ -736,6 +742,63 @@ export function wrongDirection(text: string, state: AgentState): string {
   return '';
 }
 
+/**
+ * Checking accounts run short while savings could cover them: move just enough into each one a couple of
+ * days before its tight day, sized against that account's own projection, in one plan the family can approve.
+ */
+function topUpFix(state: AgentState): Sim | undefined {
+  const t = state.snap.twin;
+  const short = state.baseline.accountRisk.filter(r => r.peak > 0.25).sort((a, b) => (a.first > 0 ? a.first : a.day) - (b.first > 0 ? b.first : b.day));
+  if (!short.length) return undefined;
+  const name = (a: TwinAccount) => `${a.owner === 'joint' ? 'joint ' : ''}${a.kind}`;
+  const source = t.accounts
+    .filter(a => a.kind === 'savings' && a.visibility === 'full')
+    .sort((x, y) => (y.owner === 'joint' ? 1 : 0) - (x.owner === 'joint' ? 1 : 0) || y.balance - x.balance)[0];
+  if (!source) return undefined;
+  const steps = [250, 500, 750, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 7500, 10000];
+  const levers: Lever[] = [];
+  const targets: string[] = [];
+  let left = source.balance;
+  for (const r of short) {
+    const target = t.accounts.find(a => a.token === r.token);
+    if (!target) continue;
+    // Land the money before the first risky day, not the worst one.
+    const date = dayToIso(Math.max(t.today + 1, (r.early > 0 ? r.early : r.first > 0 ? r.first : r.day) - 1));
+    const lever = (amount: number): Lever => ({ kind: 'transfer', from: source.token, to: target.token, amount, date, label: `Top up ${name(target)}` });
+    const riskWith = (amount: number) => {
+      try {
+        const res = simulate(t, [...levers, lever(amount)].map(l => resolveLever(t, l)));
+        return res.accountRisk.find(x => x.token === target.token)?.peak ?? 1;
+      } catch {
+        return 1;
+      }
+    };
+    // Under 10% risk already carries margin: the band widens with every simulated day.
+    const amount = steps.filter(a => a <= left).find(a => riskWith(a) < 0.1);
+    if (amount === undefined) continue;
+    levers.push(lever(amount));
+    targets.push(name(target));
+    left -= amount;
+  }
+  if (!levers.length) return undefined;
+  const total = source.balance - left;
+  // The title is the proposal name people vote on: plain words, short enough not to be cut off.
+  const title = targets.length === 1 ? `Move ${$(total)} from ${name(source)} to ${targets[0]}` : `Move ${$(total)} from ${name(source)} to ${targets.length} accounts`;
+  const sim = runSim(state, title, levers).sim;
+  return sim && sim.diff.crunchAfter < sim.diff.crunchBefore ? sim : undefined;
+}
+
+/** The engine's own line about where the crunch is, so the briefing never says "no risk" while an account runs short. */
+function crunchWatchLine(state: AgentState): string {
+  const b = state.baseline;
+  if (b.peakCrunchRisk <= 0.25) return '';
+  const short = b.accountRisk.filter(r => r.peak > 0.25).map(r => ({ ...r, day: r.first > 0 ? r.first : r.day })).sort((x, y) => x.day - y.day);
+  const at = (r: { day: number; peak: number }) => `around ${dayToLabel(r.day)} (${Math.round(r.peak * 100)}% of paths)`;
+  if (!short.length) return `Household cash dips below its buffer ${at({ day: b.peakCrunchDay, peak: b.peakCrunchRisk })}.`;
+  if (short.length === 1) return `${short[0].token} dips below its buffer ${at(short[0])}.`;
+  return `${short.length} accounts dip below their buffers: ${short.map(r => `${r.token} ${at(r)}`).join(', and ')}.`;
+}
+
 /** Tries free fixes and keeps the one that lowers peak overdraft risk most. */
 function bestSentinelFix(state: AgentState): Sim | undefined {
   const t = state.snap.twin;
@@ -749,7 +812,7 @@ function bestSentinelFix(state: AgentState): Sim | undefined {
   if (moves.length) candidates.push(['Move bills after payday', moves]);
   if (trims.length) candidates.push(['Trim flexible spending for a month', trims]);
   if (moves.length && trims.length) candidates.push(['Move bills and trim spending', [...moves, ...trims]]);
-  let best: Sim | undefined;
+  let best: Sim | undefined = topUpFix(state);
   for (const [title, levers] of candidates) {
     const sim = runSim(state, title, levers).sim;
     if (sim && sim.diff.crunchAfter < sim.diff.crunchBefore && (!best || sim.diff.crunchAfter < best.diff.crunchAfter)) best = sim;

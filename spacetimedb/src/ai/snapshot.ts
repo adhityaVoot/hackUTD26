@@ -12,7 +12,7 @@
 import { perMonth } from './dates';
 import { sanitizeUserText } from './gateway';
 import { cleanLabel } from './twin';
-import type { TwinAccount, TwinData, TwinGoal, TwinObligation, TwinSpending, Visibility } from './types';
+import type { TwinAccount, TwinData, TwinGoal, TwinObligation, TwinSpending, AccountSpending, Visibility } from './types';
 
 // Structural copies of the table rows we read. Kept minimal so tests can build fixtures.
 export interface PersonRow {
@@ -288,7 +288,7 @@ export function buildSnapshot(input: SnapshotInput, salt = 7): Snapshot {
   }
 
   return {
-    twin: { today: input.today, members: persons.map(p => ({ token: memberToken.get(p.id)!, role: p.role, isRequester: p.id === me })), accounts, obligations, spending, goals },
+    twin: { today: input.today, members: persons.map(p => ({ token: memberToken.get(p.id)!, role: p.role, isRequester: p.id === me })), accounts, obligations, spending, goals, accountSpending: buildAccountSpending(input, accountTok) },
     map,
     subscriptions: [...subsByKey.values()],
     categoryTrend: [...cat].map(([category, v]) => ({
@@ -364,7 +364,8 @@ function buildSpending(input: SnapshotInput, accountTok: Map<bigint, string>): T
 
   // Fallback: empirical daily totals over the trailing 90 days, excluding scheduled items
   // (obligations are modeled separately) and transfers.
-  const scheduled = new Set(['income', 'transfer', 'housing', 'insurance', 'subscriptions']);
+  // Scheduled bills are modeled as obligations; their payment transactions carry the obligation kind as category.
+  const scheduled = new Set(['income', 'transfer', 'housing', 'insurance', 'subscriptions', ...input.obligations.map(o => o.kind)]);
   const window = 90;
   const daily = new Map<string, number[]>();
   for (const t of input.txns) {
@@ -385,6 +386,46 @@ function buildSpending(input: SnapshotInput, accountTok: Map<bigint, string>): T
     dailyMean: Math.round(c.dailyMean * 100) / 100,
     dailyVar: Math.round(c.dailyVar * 100) / 100,
   }));
+}
+
+/** Expected daily spending per cash account (same model as buildSpending), so the twin can tell which account drains. */
+function buildAccountSpending(input: SnapshotInput, accountTok: Map<bigint, string>): AccountSpending[] {
+  const out = new Map<string, AccountSpending>();
+  const add = (accountId: bigint, mean: number, variance: number) => {
+    const token = accountTok.get(accountId);
+    if (!token) return;
+    const row = out.get(token) ?? { token, dailyMean: 0, dailyVar: 0 };
+    row.dailyMean += mean;
+    row.dailyVar += variance;
+    out.set(token, row);
+  };
+  const liquidIds = new Set(input.accounts.filter(a => LIQUID.has(a.kind) && accountTok.has(a.id)).map(a => a.id));
+  const profiled = new Set<string>();
+  for (const p of input.spendProfiles) {
+    if (!liquidIds.has(p.accountId)) continue;
+    const ex = Math.exp(p.logMean + (p.logSd * p.logSd) / 2);
+    const ex2 = Math.exp(2 * p.logMean + 2 * p.logSd * p.logSd);
+    const mean = p.dailyProb * ex;
+    add(p.accountId, mean, p.dailyProb * ex2 - mean * mean);
+    profiled.add(`${p.accountId}:${p.category}`);
+  }
+  // Scheduled bills are modeled as obligations; their payment transactions carry the obligation kind as category.
+  const scheduled = new Set(['income', 'transfer', 'housing', 'insurance', 'subscriptions', ...input.obligations.map(o => o.kind)]);
+  const window = 90;
+  const totals = new Map<bigint, number[]>();
+  for (const t of input.txns) {
+    if (!liquidIds.has(t.accountId) || t.amountCents >= 0n) continue;
+    if (t.day <= input.today - window || t.day > input.today) continue;
+    if (scheduled.has(t.category) || profiled.has(`${t.accountId}:${t.category}`)) continue;
+    const arr = totals.get(t.accountId) ?? new Array(window).fill(0);
+    arr[input.today - t.day] += -Number(t.amountCents) / 100;
+    totals.set(t.accountId, arr);
+  }
+  for (const [accountId, arr] of totals) {
+    const mean = arr.reduce((sum, x) => sum + x, 0) / window;
+    add(accountId, mean, arr.reduce((sum, x) => sum + (x - mean) ** 2, 0) / window);
+  }
+  return [...out.values()];
 }
 
 /** The compact, model-facing overview. Signal accounts appear only inside totals. */

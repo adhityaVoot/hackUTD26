@@ -1,5 +1,6 @@
 import {isMinor} from '../accountPrivacy';
 import {simDayToIso} from '../engine/calendar';
+import {isSignalOnly} from '../visibility';
 // SpacetimeDB wiring for the Nemotron features.
 //
 // Flow: a reducer authorizes the caller, rate-limits, and inserts ai_run + ai_insight
@@ -234,7 +235,7 @@ function loadJob(tx: Ctx, runId: bigint): Loaded | null {
 function snapshotInputFor(tx: Ctx, hid: bigint, requester: bigint, today: number): SnapshotInput {
   const viewer=tx.db.person.id.find(requester);
   const ownerView=viewer?.role==='coowner';
-  const visibleAccounts=[...tx.db.account.householdId.filter(hid)].filter(a=>!ownerView||a.isJoint||a.ownerPersonId===requester||isMinor(tx.db.ageProfile.personId.find(a.ownerPersonId)?.birthDate,simDayToIso(today))||!tx.db.accountPrivacy.accountId.find(a.id)?.ownerAccessDisabled);
+  const visibleAccounts=[...tx.db.account.householdId.filter(hid)].filter(a=>!ownerView||a.isJoint||a.ownerPersonId===requester||isMinor(tx.db.ageProfile.personId.find(a.ownerPersonId)?.birthDate,simDayToIso(today))||(!tx.db.accountPrivacy.accountId.find(a.id)?.ownerAccessDisabled&&!isSignalOnly(tx,a.id)));
   const inherited=ownerView?visibleAccounts.filter(a=>!a.isJoint&&a.ownerPersonId!==requester).map(a=>({accountId:a.id,granteePersonId:requester,level:'full',status:'active',expiresAtMicros:tx.timestamp.microsSinceUnixEpoch+60_000_000n})):[];
   return {
     today,

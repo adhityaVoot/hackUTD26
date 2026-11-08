@@ -152,8 +152,9 @@ export function seedDemo(ctx: Ctx, inviteCode: string): void {
       personaKey: person.personaKey,
       pinHash: '',
     });
-    // Hackathon fixture: all demo members are under 18, as requested.
-    ctx.db.ageProfile.insert({personId:row.id,householdId:household.id,birthDate:'2009-01-01'});
+    // Demo fixture: the parents are adults; Maya is under 18 so owner supervision of her account is visible.
+    const birthDate = person.role === 'coowner' ? (person.personaKey === 'sam' ? '1984-06-12' : '1986-03-03') : '2009-01-01';
+    ctx.db.ageProfile.insert({personId:row.id,householdId:household.id,birthDate});
     personIds.set(person.id, row.id);
   }
 
