@@ -58,6 +58,7 @@ const cases: [FeatureKind, string, Record<string, unknown>?][] = [
   ['memory', 'Why did we decide against buying a car last November?'],
   ['opportunity', 'Find opportunities in our accounts and bills'],
   ['health', 'How is our financial health?'],
+  ['advisor', 'Review my accounts and tell me what to do'],
   ['briefing', 'Weekly briefing', { mode: 'weekly' }],
   ['briefing', 'Overdraft risk is high. What should we do?', { mode: 'sentinel' }],
   ['coach', 'What if we did the Japan trip in July instead of March?', { history: [{ question: 'Can we afford a $3,200 Japan trip in March?', answer: 'Yes, with trade-offs: the house goal moves 28 days later.' }] }],

@@ -223,10 +223,14 @@ function mergeScenario(ctx: Ctx, scenarioId: bigint): void {
   if (previous) ctx.db.scenario.id.update({ ...previous, status: 'superseded' });
   ctx.db.scenario.id.update({ ...scenario, status: 'merged' });
   ctx.db.household.id.update({ ...household, baselineScenarioId: baseline.id });
+  // Other open proposals and drafts are independent plans: move them onto the new baseline (keeping their
+  // status and approvals) and recompute their impact, instead of silently retiring them.
+  const rebased: bigint[] = [];
   for (const other of listed(ctx.db.scenario.householdId.filter(household.id))) {
     if (other.id === baseline.id || other.id === scenario.id) continue;
     if (other.parentId === previousId && (other.status === 'proposed' || other.status === 'draft')) {
-      ctx.db.scenario.id.update({ ...other, status: 'stale' });
+      ctx.db.scenario.id.update({ ...other, parentId: baseline.id });
+      rebased.push(other.id);
     }
   }
   for (const change of added) {
@@ -250,6 +254,18 @@ function mergeScenario(ctx: Ctx, scenarioId: bigint): void {
     });
   }
   recomputeScenario(ctx, baseline.id);
+  for (const id of rebased) recomputeScenario(ctx, id);
+}
+
+/** Put a plan that was set aside (stale) back up for approval, on top of the current household plan. */
+export function reopenScenario(ctx: Ctx, scenarioId: bigint): void {
+  const me = requireMember(ctx);
+  const scenario = ctx.db.scenario.id.find(scenarioId);
+  if (!scenario || scenario.householdId !== me.household.id) throw new SenderError('Plan not found');
+  if (scenario.status !== 'stale') throw new SenderError('Only a plan that was set aside can be reopened');
+  if (scenario.authorPersonId !== me.person.id && me.person.role !== 'coowner') throw new SenderError('Only the author or a co-owner can reopen this plan');
+  ctx.db.scenario.id.update({ ...scenario, parentId: me.household.baselineScenarioId, status: 'proposed', computedAtDay: me.household.simDay });
+  recomputeScenario(ctx, scenarioId);
 }
 
 export function voteScenario(ctx: Ctx, scenarioId: bigint, decision: string): void {

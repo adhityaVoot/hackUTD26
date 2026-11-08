@@ -20,6 +20,7 @@ import {
   forkScenario,
   proposeScenario,
   removeScenarioChange,
+  reopenScenario,
   voteScenario,
 } from './futures';
 import { createGrant as makeGrant, renewGrant as renewGrantRow, revokeGrant as revokeGrantRow } from './grants';
@@ -518,6 +519,8 @@ export const propose = spacetimedb.reducer(
   { scenarioId: t.u64() },
   (ctx, { scenarioId }) => proposeScenario(ctx, scenarioId),
 );
+
+export const reopenProposal = spacetimedb.reducer({ scenarioId: t.u64() }, (ctx, { scenarioId }) => reopenScenario(ctx, scenarioId));
 
 export const vote = spacetimedb.reducer(
   { scenarioId: t.u64(), decision: t.string() },

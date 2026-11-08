@@ -11,3 +11,4 @@
 
 .approval-progress{margin:6px 0 0;font-size:.85rem;opacity:.85}
 .approval-rules ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:.92rem}
+.simple-status.stale{opacity:.75;font-style:italic}

@@ -166,7 +166,10 @@
     "propose_agent_plan": [
       "scenarioId"
     ],
-    "request_account_review": []
+    "request_account_review": [],
+    "reopen_proposal": [
+      "scenarioId"
+    ]
   },
   "views": [
     "householdApprovals",

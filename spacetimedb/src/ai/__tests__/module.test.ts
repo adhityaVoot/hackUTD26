@@ -290,3 +290,38 @@ describe('approval rules', () => {
     expect(store.rows('scenario').find((x: any) => x.id === id).status).toBe('proposed'); // waits for Sam
   });
 });
+
+describe('several open proposals (bug report: approving one completed all of them)', () => {
+  const planFor = (label: string, amount: number) => {
+    (mod.askTwin as any)(reducerCtx(PRIYA), { question: `Can we afford ${label}?` });
+    runJobs(scripted([
+      () => toolCall('simulate_scenario', { title: label, levers: [{ kind: 'one_time', amount, date: '2027-03-01', label }] }),
+      () => final({ title: label, verdict: 'yes', answer: 'Yes.', tradeoffs: [], recommended_sim: 'sim_1' }),
+    ]));
+    const rows = store.rows('aiInsight');
+    return BigInt(JSON.parse(rows[rows.length - 1].resultJson).scenarios[0].scenarioId);
+  };
+  it("approving one plan leaves the others open, with their approvals, for Sam to approve", () => {
+    const a = planFor('a $3,200 Japan trip', 3200);
+    const b = planFor('a $2,000 couch', 2000);
+    (mod.proposeAgentPlan as any)(reducerCtx(PRIYA), { scenarioId: a });
+    (mod.proposeAgentPlan as any)(reducerCtx(PRIYA), { scenarioId: b });
+    (mod.vote as any)(reducerCtx(SAM), { scenarioId: a, decision: 'approve' });
+    const status = (id: bigint) => store.rows('scenario').find((x: any) => x.id === id).status;
+    expect(status(a)).toBe('merged');
+    expect(status(b)).toBe('proposed'); // was 'stale' before the fix
+    const baseline = store.rows('household')[0].baselineScenarioId;
+    expect(store.rows('scenario').find((x: any) => x.id === b).parentId).toBe(baseline);
+    (mod.vote as any)(reducerCtx(SAM), { scenarioId: b, decision: 'approve' });
+    expect(status(b)).toBe('merged');
+  });
+  it('a plan already set aside as stale can be reopened by a co-owner', () => {
+    const c = planFor('a $1,500 laptop', 1500);
+    (mod.proposeAgentPlan as any)(reducerCtx(PRIYA), { scenarioId: c });
+    const row = store.rows('scenario').find((x: any) => x.id === c);
+    store.db.scenario.id.update({ ...row, status: 'stale' }); // what the old merge left behind
+    expect(() => (mod.reopenProposal as any)(reducerCtx(MAYA), { scenarioId: c })).toThrow(/author or a co-owner/);
+    (mod.reopenProposal as any)(reducerCtx(SAM), { scenarioId: c });
+    expect(store.rows('scenario').find((x: any) => x.id === c).status).toBe('proposed');
+  });
+});
