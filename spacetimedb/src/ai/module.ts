@@ -11,13 +11,13 @@
 import { ScheduleAt, TimeDuration } from 'spacetimedb';
 import { SenderError, t } from 'spacetimedb/server';
 import type Spacetimedb from '../index';
-import { envValue, requireAdmin, requireCoOwner, requireMember, type Ctx } from '../auth';
-import { aiJob } from '../tables';
+import { envValue, requireAdmin, requireMember, type Ctx } from '../auth';
 import { runAgent } from './agent';
+import { recomputeScenario } from '../recompute';
 import { DEFAULT_BASE_URL, DEFAULT_MODEL, type HttpLike, type ModelConfig } from './model';
 import { buildSnapshot, type SnapshotInput, type Snapshot } from './snapshot';
 import type { MemoryRow } from './memory';
-import { aiInsight, decisionMemory, negotiation, negotiationPosition, nemotronWatch } from './tables';
+import { aiInsight, decisionMemory, negotiation, negotiationPosition, nemotronJob, nemotronWatch } from './tables';
 import { describeLever, newState, type BankLookup } from './tools';
 import { routeCoach, type CoachTurn } from './agent';
 import { simulate } from './twin';
@@ -89,7 +89,7 @@ function enqueueFor(ctx: Ctx, householdId: bigint, requesterPersonId: bigint, ki
     createdAt: ctx.timestamp,
     updatedAt: ctx.timestamp,
   });
-  ctx.db.aiJob.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.time(ctx.timestamp.microsSinceUnixEpoch), runId: run.id });
+  ctx.db.nemotronJob.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.time(ctx.timestamp.microsSinceUnixEpoch), runId: run.id });
   return insight;
 }
 
@@ -389,53 +389,13 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
     },
   );
 
-  /** Negotiation Room flow: mediate once members have written their positions. */
-  const mediateNegotiation = spacetimedb.reducer({ negotiationId: t.u64() }, (ctx, { negotiationId }) => {
+  const requestMediation = spacetimedb.reducer({ negotiationId: t.u64() }, (ctx, { negotiationId }) => {
     const me = requireMember(ctx);
     const neg = ctx.db.negotiation.id.find(negotiationId);
     if (!neg || neg.householdId !== me.household.id) throw new SenderError('Negotiation not found');
     const positions = [...ctx.db.negotiationPosition.negotiationId.filter(negotiationId)];
     if (positions.length < 2) throw new SenderError('At least two members need to add a position first');
     enqueue(ctx, me, 'negotiation', neg.topic, 0n, { negotiationId: String(negotiationId) });
-  });
-
-  /**
-   * Mediator for two conflicting proposals (the frontend's "Ask Mediator"). Opens a negotiation whose
-   * positions are the two proposals, then runs the same household-view mediation.
-   */
-  const requestMediation = spacetimedb.reducer({ scenarioIdA: t.u64(), scenarioIdB: t.u64() }, (ctx, { scenarioIdA, scenarioIdB }) => {
-    const me = requireMember(ctx);
-    if (scenarioIdA === scenarioIdB) throw new SenderError('Pick two different proposals');
-    const pick = (id: bigint) => {
-      const sc = ctx.db.scenario.id.find(id);
-      if (!sc || sc.householdId !== me.household.id) throw new SenderError('Proposal not found');
-      if (sc.scope !== 'household') throw new SenderError('Only household proposals can be mediated');
-      return sc;
-    };
-    const a = pick(scenarioIdA);
-    const b = pick(scenarioIdB);
-    const neg = ctx.db.negotiation.insert({
-      id: 0n,
-      householdId: me.household.id,
-      topic: `${a.title} vs ${b.title}`.slice(0, 140),
-      status: 'open',
-      openedByPersonId: me.person.id,
-      insightId: 0n,
-      createdAt: ctx.timestamp,
-    });
-    for (const sc of [a, b]) {
-      const changes = [...ctx.db.scenarioChange.scenarioId.filter(sc.id)].map(c => c.label).filter(Boolean);
-      ctx.db.negotiationPosition.insert({
-        id: 0n,
-        negotiationId: neg.id,
-        householdId: me.household.id,
-        personId: sc.authorPersonId || me.person.id,
-        want: `${sc.title}${changes.length ? `: ${changes.join('; ')}` : ''}`.slice(0, 400),
-        priority: 3,
-        updatedAt: ctx.timestamp,
-      });
-    }
-    enqueue(ctx, me, 'negotiation', neg.topic, 0n, { negotiationId: String(neg.id) });
   });
 
   const closeNegotiation = spacetimedb.reducer({ negotiationId: t.u64() }, (ctx, { negotiationId }) => {
@@ -496,7 +456,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
 
   // ----- Conversational coach, Health Check, Briefing -----
   /** One chat box: Nemotron routes the message to the right workflow. Pass the first insight id of a thread to follow up. */
-  const askCoach = spacetimedb.reducer({ question: t.string(), threadInsightId: t.u64() }, (ctx, { question, threadInsightId }) => {
+  const askCoach = spacetimedb.reducer({ message: t.string(), threadInsightId: t.u64() }, (ctx, { message, threadInsightId }) => {
     const me = requireMember(ctx);
     let threadId = '';
     if (threadInsightId !== 0n) {
@@ -504,7 +464,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
       if (!first || first.householdId !== me.household.id || first.requesterPersonId !== me.person.id) throw new SenderError('Conversation not found');
       threadId = (JSON.parse(first.contextJson || '{}') as Record<string, string>).threadId || String(first.id);
     }
-    const ins = enqueue(ctx, me, 'coach', cleanText(question, 'question'), me.person.id, threadId ? { threadId } : {});
+    const ins = enqueue(ctx, me, 'coach', cleanText(message, 'message'), me.person.id, threadId ? { threadId } : {});
     if (!threadId) ctx.db.aiInsight.id.update({ ...ins, contextJson: JSON.stringify({ threadId: String(ins.id) }) });
   });
 
@@ -564,7 +524,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
   });
 
   // ----- The agent procedure -----
-  const runAiJob = spacetimedb.procedure({ onSchedule: aiJob }, { job: aiJob.rowType }, t.unit(), (ctx, { job }) => {
+  const runAiJob = spacetimedb.procedure({ onSchedule: nemotronJob }, { job: nemotronJob.rowType }, t.unit(), (ctx, { job }) => {
     const loaded = ctx.withTx(tx => loadJob(tx, job.runId));
     if (!loaded) return {};
 
@@ -640,6 +600,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
         for (const l of d.levers) {
           tx.db.scenarioChange.insert({ id: 0n, scenarioId: sc.id, householdId: loaded.householdId, kind: l.kind, paramsJson: leverParams(l, snap), label: String(humanize(l.label)).slice(0, 80) });
         }
+        recomputeScenario(tx, sc.id);
       }
 
       const publicResult = humanize({
@@ -739,7 +700,6 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
     openNegotiation,
     submitPosition,
     requestMediation,
-    mediateNegotiation,
     closeNegotiation,
     recordDecision,
     shareInsight,

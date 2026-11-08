@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { dayToIso, isoToDay, occursOn } from '../dates';
+import { parseMoney } from '../intent';
 import { checkNumbers, collectNumbers, sanitizeUserText, scanOutbound } from '../gateway';
+import { priceFromPassages } from '../lookup';
 import { extractJson, stripThinking } from '../model';
 import { searchMemory } from '../memory';
 import { buildSnapshot, overviewForModel } from '../snapshot';
 import { diff, LeverError, resolveLever, simulate } from '../twin';
-import { newState, executeTool, getOpportunities } from '../tools';
+import { forecastSummary, newState, executeTool, getOpportunities, vitalsView } from '../tools';
 import { MAYA, patelInput, PRIYA, SAM, TODAY } from './fixture';
 
 describe('dates', () => {
@@ -38,6 +40,67 @@ describe('snapshot privacy', () => {
     // Signal account shows up only as a total.
     expect(json).toContain('"other_household_cash":6100');
     expect(snap.injectionSuspects).toBe(1);
+  });
+
+  it('drops nickname words from bill labels so the privacy scan can send the overview', () => {
+    const input = patelInput();
+    input.accounts = input.accounts.map(a => (a.kind === 'auto_loan' ? { ...a, nickname: 'Toyota auto loan' } : a));
+    input.obligations = input.obligations.map(o => (o.kind === 'auto_loan' ? { ...o, label: 'Toyota auto loan payment' } : o));
+    const snap = buildSnapshot(input);
+    const json = JSON.stringify(overviewForModel(snap));
+    expect(json).not.toContain('Toyota');
+    expect(scanOutbound(json, snap.map.names, snap.map.nicknameWords).ok).toBe(true);
+  });
+
+  it('prints which nickname word blocks a Patel-shaped payload', () => {
+    const c = (d: number) => BigInt(Math.round(d * 100));
+    const input = patelInput();
+    input.persons = [
+      { id: PRIYA, displayName: 'Priya', role: 'coowner' },
+      { id: SAM, displayName: 'Sam', role: 'coowner' },
+      { id: MAYA, displayName: 'Maya', role: 'member' },
+    ];
+    input.accounts = [
+      { id: 1n, ownerPersonId: PRIYA, isJoint: false, kind: 'checking', nickname: 'Priya checking', balanceCents: c(4200), limitCents: 0n, aprBps: 0, bufferCents: c(200), maturityDay: -1 },
+      { id: 4n, ownerPersonId: SAM, isJoint: false, kind: 'checking', nickname: 'Sam checking', balanceCents: c(3100), limitCents: 0n, aprBps: 0, bufferCents: c(200), maturityDay: -1 },
+      { id: 5n, ownerPersonId: SAM, isJoint: false, kind: 'checking', nickname: 'Side business', balanceCents: c(6400), limitCents: 0n, aprBps: 0, bufferCents: c(100), maturityDay: -1 },
+      { id: 3n, ownerPersonId: PRIYA, isJoint: false, kind: 'ira', nickname: 'Priya IRA', balanceCents: c(24000), limitCents: 0n, aprBps: 0, bufferCents: 0n, maturityDay: -1 },
+      { id: 6n, ownerPersonId: SAM, isJoint: false, kind: 'ira', nickname: 'Sam IRA', balanceCents: c(11000), limitCents: 0n, aprBps: 0, bufferCents: 0n, maturityDay: -1 },
+      { id: 7n, ownerPersonId: 0n, isJoint: true, kind: 'checking', nickname: 'Joint checking', balanceCents: c(3100), limitCents: 0n, aprBps: 0, bufferCents: c(200), maturityDay: -1 },
+      { id: 8n, ownerPersonId: 0n, isJoint: true, kind: 'savings', nickname: 'Joint savings', balanceCents: c(8000), limitCents: 0n, aprBps: 0, bufferCents: 0n, maturityDay: -1 },
+      { id: 9n, ownerPersonId: 0n, isJoint: true, kind: 'cd', nickname: '12-month CD', balanceCents: c(5000), limitCents: 0n, aprBps: 450, bufferCents: 0n, maturityDay: 200 },
+      { id: 10n, ownerPersonId: 0n, isJoint: true, kind: 'mortgage', nickname: 'Home mortgage', balanceCents: c(280000), limitCents: 0n, aprBps: 625, bufferCents: 0n, maturityDay: -1 },
+      { id: 11n, ownerPersonId: 0n, isJoint: true, kind: 'auto_loan', nickname: 'Toyota auto loan', balanceCents: c(14500), limitCents: 0n, aprBps: 499, bufferCents: 0n, maturityDay: -1 },
+      { id: 12n, ownerPersonId: 0n, isJoint: true, kind: 'credit_card', nickname: 'Joint card', balanceCents: c(1200), limitCents: c(8000), aprBps: 1999, bufferCents: 0n, maturityDay: -1 },
+      { id: 13n, ownerPersonId: MAYA, isJoint: false, kind: 'checking', nickname: 'Student checking', balanceCents: c(1200), limitCents: 0n, aprBps: 0, bufferCents: c(250), maturityDay: -1 },
+    ];
+    input.grants = [{ accountId: 5n, granteePersonId: 0n, level: 'signal', status: 'active', expiresAtMicros: 9_000_000_000_000_000n }];
+    input.obligations = [
+      { id: 1n, accountId: 1n, kind: 'income', label: 'Priya salary', amountCents: c(2800), cadence: 'semimonthly', anchorDay: 13, flexible: false, active: true },
+      { id: 2n, accountId: 4n, kind: 'income', label: 'Sam salary', amountCents: c(2400), cadence: 'biweekly', anchorDay: 12, flexible: false, active: true },
+      { id: 3n, accountId: 7n, kind: 'mortgage', label: 'PNC mortgage payment', amountCents: c(1850), cadence: 'monthly', anchorDay: 27, flexible: false, active: true },
+      { id: 4n, accountId: 7n, kind: 'auto_loan', label: 'Toyota auto loan payment', amountCents: c(485), cadence: 'monthly', anchorDay: 27, flexible: false, active: true },
+      { id: 5n, accountId: 7n, kind: 'card_payment', label: 'Joint card payment', amountCents: c(620), cadence: 'monthly', anchorDay: 27, flexible: true, active: true },
+      { id: 6n, accountId: 13n, kind: 'transfer', label: 'Rent split to Priya', amountCents: c(700), cadence: 'once', anchorDay: 12, flexible: false, active: true },
+      { id: 7n, accountId: 13n, kind: 'tuition', label: 'UT Dallas textbooks', amountCents: c(350), cadence: 'once', anchorDay: 12, flexible: false, active: true },
+      { id: 8n, accountId: 8n, kind: 'transfer', label: 'Monthly house-fund transfer', amountCents: c(400), cadence: 'monthly', anchorDay: 5, flexible: false, active: true },
+    ];
+    const snap = buildSnapshot(input);
+    const state = newState('twin', snap, 'Buy a Koenigsegg Jesko for 2 million dollars');
+    const payload = JSON.stringify({ overview: overviewForModel(snap), forecast: forecastSummary(state), vitals: vitalsView(state.baseline), q: state.question });
+    const hits = snap.map.nicknameWords.filter(w => new RegExp(`\\b${w}\\b`).test(payload));
+    expect(scanOutbound(payload, snap.map.names, snap.map.nicknameWords)).toEqual({ ok: true, reason: '' });
+    expect(hits).toEqual([]);
+  });
+
+  it('reads 2 million dollars as two million', () => {
+    expect(parseMoney('Buy a Koenigsegg Jesko for 2 million dollars')).toBe(2_000_000);
+    expect(parseMoney('a $3.4 million car')).toBe(3_400_000);
+  });
+
+  it('reads a price from a retrieved passage and ignores a bare guess', () => {
+    expect(priceFromPassages([{ text: 'The Jesko has a price of $3 million.' }])).toBe(3_000_000);
+    expect(priceFromPassages([{ text: 'No figure is listed.' }])).toBeNull();
   });
 
   it('household mode (negotiation) sees joint and household-shared data only', () => {

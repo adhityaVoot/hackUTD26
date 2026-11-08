@@ -33,6 +33,8 @@ import {
   setMonthlySpending as setMonthlySpendingRow,
   updateAccount as updateAccountRow,
 } from './life';
+import { registerNemotron } from './ai/module';
+import { aiInsight, decisionMemory, negotiation, negotiationPosition, nemotronJob, nemotronWatch, nemotronWatchState } from './ai/tables';
 import { seedDemo } from './seed';
 import { timestampAt } from './time';
 import {
@@ -89,8 +91,6 @@ import {
   txn,
   vital,
 } from './tables';
-import { registerNemotron } from './ai/module';
-import { aiInsight, decisionMemory, negotiation, negotiationPosition, nemotronWatch, nemotronWatchState } from './ai/tables';
 
 const spacetimedb = schema(
   {
@@ -124,6 +124,7 @@ const spacetimedb = schema(
     clockTick,
     dailyMaintenance,
     backtestResult,
+    nemotronJob,
     aiInsight,
     decisionMemory,
     negotiation,
@@ -648,10 +649,9 @@ export const renewGrant = spacetimedb.reducer(
   (ctx, { grantId, durationSeconds }) => renewGrantRow(ctx, grantId, durationSeconds),
 );
 
-
-// Nemotron features: Coach (routes to the rest), Digital Twin, Ripple Effect, Negotiation Room,
-// Stress Test, Life Event Simulator, Financial Memory, Opportunity Radar, Health Check, and the
-// Sentinel briefing that runs on its own schedule. See src/ai/module.ts.
+// Coach, Health Check, Sentinel, Digital Twin, Ripple, Negotiation, Stress Test,
+// Life Event, Financial Memory, and Opportunity Radar. The existing setAiEnabled
+// reducer stays the co-owner kill switch.
 export const {
   askCoach,
   requestHealthCheck,
@@ -668,7 +668,6 @@ export const {
   openNegotiation,
   submitPosition,
   requestMediation,
-  mediateNegotiation,
   closeNegotiation,
   recordDecision,
   shareInsight,
@@ -680,3 +679,4 @@ export const {
   myNegotiations,
   myNegotiationPositions,
 } = registerNemotron(spacetimedb);
+

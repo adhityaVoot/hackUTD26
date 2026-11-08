@@ -41,20 +41,38 @@ import AddObligationReducer from "./add_obligation_reducer";
 import AddPersonReducer from "./add_person_reducer";
 import AddTransactionReducer from "./add_transaction_reducer";
 import AdminSeedDemoReducer from "./admin_seed_demo_reducer";
+import AskCoachReducer from "./ask_coach_reducer";
+import AskMemoryReducer from "./ask_memory_reducer";
+import AskTwinReducer from "./ask_twin_reducer";
+import CloseNegotiationReducer from "./close_negotiation_reducer";
 import CreateGrantReducer from "./create_grant_reducer";
 import CreateHouseholdReducer from "./create_household_reducer";
 import ForkReducer from "./fork_reducer";
 import JoinHouseholdReducer from "./join_household_reducer";
+import OpenNegotiationReducer from "./open_negotiation_reducer";
 import ProposeReducer from "./propose_reducer";
+import RecordDecisionReducer from "./record_decision_reducer";
 import RemoveAccountReducer from "./remove_account_reducer";
 import RemoveChangeReducer from "./remove_change_reducer";
 import RemoveGoalReducer from "./remove_goal_reducer";
 import RemoveObligationReducer from "./remove_obligation_reducer";
 import RenewGrantReducer from "./renew_grant_reducer";
+import RequestBriefingReducer from "./request_briefing_reducer";
+import RequestHealthCheckReducer from "./request_health_check_reducer";
+import RequestMediationReducer from "./request_mediation_reducer";
 import RevokeGrantReducer from "./revoke_grant_reducer";
+import ScanOpportunitiesReducer from "./scan_opportunities_reducer";
+import SeedNemotronDemoReducer from "./seed_nemotron_demo_reducer";
 import SetAiEnabledReducer from "./set_ai_enabled_reducer";
 import SetMonthlySpendingReducer from "./set_monthly_spending_reducer";
 import SetPinReducer from "./set_pin_reducer";
+import ShareInsightReducer from "./share_insight_reducer";
+import SimulateLifeEventReducer from "./simulate_life_event_reducer";
+import SimulateRippleReducer from "./simulate_ripple_reducer";
+import StartNemotronWatchReducer from "./start_nemotron_watch_reducer";
+import StopNemotronWatchReducer from "./stop_nemotron_watch_reducer";
+import StressTestReducer from "./stress_test_reducer";
+import SubmitPositionReducer from "./submit_position_reducer";
 import UpdateAccountReducer from "./update_account_reducer";
 import VoteReducer from "./vote_reducer";
 
@@ -69,12 +87,17 @@ import HouseholdPeopleRow from "./household_people_table";
 import HouseholdPresenceRow from "./household_presence_table";
 import HouseholdScenariosRow from "./household_scenarios_table";
 import MyAccountsRow from "./my_accounts_table";
+import MyAgentLogRow from "./my_agent_log_table";
+import MyAiInsightsRow from "./my_ai_insights_table";
 import MyAlertsRow from "./my_alerts_table";
+import MyDecisionsRow from "./my_decisions_table";
 import MyForecastRow from "./my_forecast_table";
 import MyGrantsRow from "./my_grants_table";
 import MyHouseholdRow from "./my_household_table";
 import MyInviteCodeRow from "./my_invite_code_table";
 import MyMemberRow from "./my_member_table";
+import MyNegotiationPositionsRow from "./my_negotiation_positions_table";
+import MyNegotiationsRow from "./my_negotiations_table";
 import MyObligationsRow from "./my_obligations_table";
 import MyTxnsRow from "./my_txns_table";
 import MyVitalsRow from "./my_vitals_table";
@@ -133,6 +156,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyAccountsRow),
+  myAgentLog: __table({
+    name: 'my_agent_log',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAgentLogRow),
+  myAiInsights: __table({
+    name: 'my_ai_insights',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAiInsightsRow),
   myAlerts: __table({
     name: 'my_alerts',
     indexes: [
@@ -140,6 +177,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyAlertsRow),
+  myDecisions: __table({
+    name: 'my_decisions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyDecisionsRow),
   myForecast: __table({
     name: 'my_forecast',
     indexes: [
@@ -175,6 +219,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyMemberRow),
+  myNegotiationPositions: __table({
+    name: 'my_negotiation_positions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyNegotiationPositionsRow),
+  myNegotiations: __table({
+    name: 'my_negotiations',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyNegotiationsRow),
   myObligations: __table({
     name: 'my_obligations',
     indexes: [
@@ -214,20 +272,38 @@ const reducersSchema = __reducers(
   __reducerSchema("add_person", AddPersonReducer),
   __reducerSchema("add_transaction", AddTransactionReducer),
   __reducerSchema("admin_seed_demo", AdminSeedDemoReducer),
+  __reducerSchema("ask_coach", AskCoachReducer),
+  __reducerSchema("ask_memory", AskMemoryReducer),
+  __reducerSchema("ask_twin", AskTwinReducer),
+  __reducerSchema("close_negotiation", CloseNegotiationReducer),
   __reducerSchema("create_grant", CreateGrantReducer),
   __reducerSchema("create_household", CreateHouseholdReducer),
   __reducerSchema("fork", ForkReducer),
   __reducerSchema("join_household", JoinHouseholdReducer),
+  __reducerSchema("open_negotiation", OpenNegotiationReducer),
   __reducerSchema("propose", ProposeReducer),
+  __reducerSchema("record_decision", RecordDecisionReducer),
   __reducerSchema("remove_account", RemoveAccountReducer),
   __reducerSchema("remove_change", RemoveChangeReducer),
   __reducerSchema("remove_goal", RemoveGoalReducer),
   __reducerSchema("remove_obligation", RemoveObligationReducer),
   __reducerSchema("renew_grant", RenewGrantReducer),
+  __reducerSchema("request_briefing", RequestBriefingReducer),
+  __reducerSchema("request_health_check", RequestHealthCheckReducer),
+  __reducerSchema("request_mediation", RequestMediationReducer),
   __reducerSchema("revoke_grant", RevokeGrantReducer),
+  __reducerSchema("scan_opportunities", ScanOpportunitiesReducer),
+  __reducerSchema("seed_nemotron_demo", SeedNemotronDemoReducer),
   __reducerSchema("set_ai_enabled", SetAiEnabledReducer),
   __reducerSchema("set_monthly_spending", SetMonthlySpendingReducer),
   __reducerSchema("set_pin", SetPinReducer),
+  __reducerSchema("share_insight", ShareInsightReducer),
+  __reducerSchema("simulate_life_event", SimulateLifeEventReducer),
+  __reducerSchema("simulate_ripple", SimulateRippleReducer),
+  __reducerSchema("start_nemotron_watch", StartNemotronWatchReducer),
+  __reducerSchema("stop_nemotron_watch", StopNemotronWatchReducer),
+  __reducerSchema("stress_test", StressTestReducer),
+  __reducerSchema("submit_position", SubmitPositionReducer),
   __reducerSchema("update_account", UpdateAccountReducer),
   __reducerSchema("vote", VoteReducer),
 );

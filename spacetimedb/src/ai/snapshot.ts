@@ -219,7 +219,7 @@ export function buildSnapshot(input: SnapshotInput, salt = 7): Snapshot {
       obligations.push({
         token: tok,
         kind: o.kind,
-        label: obligationLabel(o, i, map.nameToToken),
+        label: obligationLabel(o, i, map.nameToToken, map.nicknameWords),
         amount: Number(o.amountCents) / 100,
         cadence: o.cadence,
         anchorDay: o.anchorDay,
@@ -303,7 +303,7 @@ export function buildSnapshot(input: SnapshotInput, salt = 7): Snapshot {
 
 // Words common enough in account nicknames that blocking them would block every prompt.
 const GENERIC_WORDS = new Set(
-  'joint checking savings saving house home fund funds mortgage car auto loan loans visa mastercard amex discover card credit debit account accounts business personal emergency travel college main primary bills bill the my our his her their student ira roth cd brokerage rainy day gift kids family vacation spending everyday high yield money market reserve cash wallet virtual rewards platinum gold signature'.split(' '),
+  'joint checking savings saving house home fund funds mortgage car auto loan loans visa mastercard amex discover card credit debit account accounts business personal emergency travel college main primary bills bill the my our his her their student ira roth cd brokerage rainy day gift kids family vacation spending everyday high yield money market reserve cash wallet virtual rewards platinum gold signature month months monthly year years yearly week weeks weekly day days daily payment payments salary paycheck transfer split'.split(' '),
 );
 
 /** Words from a nickname that could identify someone (proper nouns, company names). */
@@ -318,8 +318,10 @@ function safeMerchant(code: string): string {
   return /^[A-Z0-9_]{1,32}$/.test(code) ? code : 'MERCHANT';
 }
 
-function obligationLabel(o: ObligationRow, i: number, names: Map<string, string>): string {
-  // Labels come from kinds, not user text. A short sanitized label is kept only when it's plainly safe.
+function obligationLabel(o: ObligationRow, i: number, names: Map<string, string>, nicknameWords: string[]): string {
+  // Labels come from kinds, not user text. A short sanitized label is kept only when it
+  // does not still contain a member name or an account-nickname word. Those words are
+  // what the outbound privacy scan refuses to send, and a leaked one blocks the model.
   const kindLabel: Record<string, string> = {
     income: 'Paycheck',
     mortgage: 'Mortgage',
@@ -334,7 +336,10 @@ function obligationLabel(o: ObligationRow, i: number, names: Map<string, string>
   };
   const base = kindLabel[o.kind] ?? 'Bill';
   const safe = !looksLikeInjection(o.label) && /^[A-Za-z0-9 &'-]{1,30}$/.test(o.label.trim());
-  return safe ? cleanLabel(sanitizeUserText(o.label, names, 40), base) : `${base} ${i + 1}`;
+  if (!safe) return `${base} ${i + 1}`;
+  const cleaned = cleanLabel(sanitizeUserText(o.label, names, 40), base);
+  const leaked = [...names.keys(), ...nicknameWords].some(w => w.length >= 3 && new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(cleaned));
+  return leaked ? `${base} ${i + 1}` : cleaned;
 }
 
 function buildSpending(input: SnapshotInput, accountTok: Map<bigint, string>): TwinSpending[] {

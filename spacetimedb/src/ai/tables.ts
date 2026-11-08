@@ -1,5 +1,12 @@
 import { table, t } from 'spacetimedb/server';
 
+// New scheduled table. The published ai_job table cannot gain a schedule on Maincloud.
+export const nemotronJob = table({ name: 'nemotron_job' }, {
+  scheduledId: t.u64().primaryKey().autoInc(),
+  scheduledAt: t.scheduleAt(),
+  runId: t.u64(),
+});
+
 // Nemotron feature tables. Private; members read them through the views in ai/module.ts.
 
 export const aiInsight = table({ name: 'ai_insight' }, {

@@ -49,7 +49,7 @@
       "inviteCode"
     ],
     "ask_coach": [
-      "question",
+      "message",
       "threadInsightId"
     ],
     "create_grant": [
@@ -90,10 +90,6 @@
       "grantId",
       "durationSeconds"
     ],
-    "request_mediation": [
-      "scenarioIdA",
-      "scenarioIdB"
-    ],
     "revoke_grant": [
       "grantId"
     ],
@@ -116,12 +112,12 @@
       "aprBps",
       "bufferCents"
     ],
+    "verify_pin": [
+      "pin"
+    ],
     "vote": [
       "scenarioId",
       "decision"
-    ],
-    "verify_pin": [
-      "pin"
     ]
   },
   "views": [
@@ -132,12 +128,17 @@
     "householdPresence",
     "householdScenarios",
     "myAccounts",
+    "myAgentLog",
+    "myAiInsights",
     "myAlerts",
+    "myDecisions",
     "myForecast",
     "myGrants",
     "myHousehold",
     "myInviteCode",
     "myMember",
+    "myNegotiationPositions",
+    "myNegotiations",
     "myObligations",
     "myTxns",
     "myVitals",
