@@ -257,6 +257,10 @@ export function voteScenario(ctx: Ctx, scenarioId: bigint, decision: string): vo
   if (decision !== 'approve' && decision !== 'decline' && decision !== 'counter') {
     throw new SenderError('Vote must be approve, decline, or counter');
   }
+  // One vote per person: a second Approve click must not count twice.
+  if (listed(ctx.db.approval.scenarioId.filter(scenarioId)).some(row => row.personId === me.person.id && row.decision === decision)) {
+    throw new SenderError(decision === 'approve' ? 'You already approved this plan; it merges when every co-owner approves' : 'You already responded to this plan');
+  }
   ctx.db.approval.insert({
     id: 0n,
     scenarioId,

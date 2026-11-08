@@ -8,3 +8,5 @@
 .simple-active-plan .risk-calendar button{min-height:76px}
 .money-request-compose .workspace-form{max-width:640px}.money-request-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.money-request-actions:empty{display:none}@media(max-width:640px){.money-request-actions{grid-column:1/-1;justify-content:flex-start}.money-request-actions button{flex:1}}
 .account-owner-access h3{display:flex;align-items:center;gap:8px}.account-owner-access{margin:18px 0}.simple-request-list .simple-status{font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+
+.approval-progress{margin:6px 0 0;font-size:.85rem;opacity:.85}

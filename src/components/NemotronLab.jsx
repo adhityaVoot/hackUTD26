@@ -68,7 +68,7 @@ const MODES=[
   {key:'ripple',label:'Ripple effect',Icon:Waves,op:'simulate_ripple',field:'decision',placeholder:'Buy a $1,500 laptop next week',hint:'One decision and every knock-on effect, in order.'},
   {key:'life_event',label:'Life event',Icon:CalendarClock,op:'simulate_life_event',field:'event',placeholder:"We're getting married next June",hint:'Dated costs, a savings target, and a checklist.'},
 ];
-const QUICK=[
+export const QUICK=[
   {key:'health',label:'Health check',Icon:HeartPulse,op:'request_health_check'},
   {key:'opportunity',label:'Find savings',Icon:PiggyBank,op:'scan_opportunities'},
   {key:'briefing',label:"What's coming up",Icon:Sparkles,op:'request_briefing'},
@@ -127,68 +127,103 @@ function useSuggestions(){
   if(band('goal_track')==='red')out.push({mode:'ask',text:'How do we get our goals back on track?'});
   if(['red','yellow'].includes(band('utilization')))out.push({mode:'debate',text:'Should I pay down my credit card this month?'});
   if(['red','yellow'].includes(band('runway')))out.push({mode:'stress',text:'What if our income stopped for a month?'});
-  if(['red','yellow'].includes(band('savings_rate')))out.push({quick:'opportunity',text:'Where can we save each month?'});
   for(const d of [{mode:'ask',text:'I want to buy a Rolex'},{mode:'debate',text:'Should we buy a $35,000 car in March?'},{mode:'stress',text:'What if Sam loses his job for two months?'},{mode:'life_event',text:"We're getting married next June"}])if(out.length<4)out.push(d);
   return out.slice(0,4);
 }
 
-/** A single workflow, compact, for embedding (e.g. "An income change" in the planner). */
+const topId=s=>Math.max(0,...(s.myAiInsights||[]).map(r=>Number(r.id)));
+const visible=r=>r.status!=='blocked'&&r.status!=='failed';
+
+/**
+ * Keeps the newest output in view like a chat app: scrolls to a new message when it appears, then to the
+ * start of the reply once it finishes (results live in the page flow, so this scrolls the page).
+ */
+function useFollowNewest(rows){
+  const lastRef=useRef(null);
+  const last=rows[rows.length-1];
+  const key=last?`${String(last.id)}:${last.status}`:'';
+  useEffect(()=>{if(key)lastRef.current?.scrollIntoView({behavior:'smooth',block:last.status==='thinking'?'end':'start'})},[key]);
+  return lastRef;
+}
+
+/** Past answers stay out of the way until asked for. */
+function History({rows,label='Past requests'}){
+  const [open,setOpen]=useState(false);
+  if(!rows.length)return null;
+  return <div className="lab-history"><button type="button" className="coach-new" onClick={()=>setOpen(v=>!v)}><RotateCcw size={13}/>{open?'Hide history':`${label} (${rows.length})`}</button>
+    {open&&<div className="lab-history-list">{rows.slice().reverse().map(row=><details key={String(row.id)}><summary>{row.question} <small>· {row.kind.replace('_',' ')}</small></summary><Reply row={row}/></details>)}</div>}</div>;
+}
+
+/** A single workflow, compact, for embedding (e.g. "An income change" in the planner). Starts fresh. */
 export function NemotronTool({mode='stress',placeholder}){
   const s=useHousehold();const m=MODES.find(x=>x.key===mode);
-  const [text,setText]=useState(''),[busy,setBusy]=useState(false),[since,setSince]=useState(null);
-  const latest=(s.myAiInsights||[]).filter(r=>r.kind===mode&&r.status!=='blocked'&&r.status!=='failed'&&(since==null||Number(r.id)>since)).slice().sort((a,b)=>Number(b.id)-Number(a.id))[0];
-  async function run(e){e.preventDefault();if(!text.trim())return;setBusy(true);setSince(Math.max(0,...(s.myAiInsights||[]).map(r=>Number(r.id))));try{await s.act(m.op,{[m.field]:text.trim()})}catch{}finally{setBusy(false)}}
+  const [text,setText]=useState(''),[busy,setBusy]=useState(false),[since]=useState(()=>topId(s));
+  const mine=(s.myAiInsights||[]).filter(r=>r.kind===mode&&visible(r)).slice().sort((a,b)=>Number(a.id)-Number(b.id));
+  const fresh=mine.filter(r=>Number(r.id)>since);const latest=fresh[fresh.length-1];
+  const lastRef=useFollowNewest(latest?[latest]:[]);
+  async function run(e){e.preventDefault();if(!text.trim())return;setBusy(true);try{await s.act(m.op,{[m.field]:text.trim()});setText('')}catch{}finally{setBusy(false)}}
   return <div className="nemotron-lab">
-    <form className="lab-form" onSubmit={run}><input value={text} onChange={e=>setText(e.target.value)} placeholder={placeholder||m.placeholder} maxLength={300} aria-label={m.label}/><button className="workspace-button" disabled={busy||!s.capabilities?.[m.op]}>{busy?'Sending…':m.label}</button></form>
-    {latest&&<Reply row={latest}/>}
+    <form className="lab-form" onSubmit={run}><input value={text} onChange={e=>setText(e.target.value)} placeholder={placeholder||m.placeholder} maxLength={300} aria-label={m.label}/><button className="workspace-button" disabled={busy||!s.capabilities?.[m.op]||!text.trim()}>{busy?'Sending…':m.label}</button></form>
+    {latest&&<div ref={lastRef}><div className="coach-bubble coach-user">{latest.question}</div><Reply row={latest}/></div>}
+    <History rows={mine.filter(r=>r!==latest)}/>
   </div>;
 }
 
+/** Account insights: one-tap household reports, shown on the Accounts tab. Starts fresh. */
+export function AccountInsights(){
+  const s=useHousehold();
+  const [since]=useState(()=>topId(s)),[busy,setBusy]=useState('');
+  const kinds=new Set(QUICK.map(q=>q.key));
+  const all=(s.myAiInsights||[]).filter(r=>kinds.has(r.kind)&&visible(r)).slice().sort((a,b)=>Number(a.id)-Number(b.id));
+  const fresh=all.filter(r=>Number(r.id)>since);const latest=fresh[fresh.length-1];
+  const lastRef=useFollowNewest(latest?[latest]:[]);
+  async function run(q){setBusy(q.key);try{await s.act(q.op,{})}catch{}finally{setBusy('')}}
+  return <section className="simple-card account-insights">
+    <div className="simple-section-heading"><h2>Account insights</h2><span className="simple-demo-badge">NEMOTRON</span></div>
+    <p className="simple-muted">One tap: Nemotron reads your accounts and bills, runs the numbers, and explains what matters.</p>
+    <div className="studio-modes">{QUICK.map(q=><button key={q.key} onClick={()=>run(q)} disabled={!!busy||!s.capabilities?.[q.op]}><q.Icon size={15}/>{busy===q.key?'Working…':q.label}</button>)}</div>
+    {latest&&<div ref={lastRef}><Reply row={latest}/></div>}
+    <History rows={all.filter(r=>r!==latest)} label="Past insights"/>
+  </section>;
+}
+
 /**
- * Ask Nemotron: one input, several agent workflows, one feed. Chat replies and visual results appear
- * in order; follow-ups continue the conversation; any simulated plan can go to the family for co-sign.
+ * Ask Nemotron: one input, several agent workflows, one feed that starts fresh each visit. Chat replies and
+ * visual results appear in order; follow-ups continue the conversation; plans can go to the family to co-sign.
  */
 export default function NemotronStudio(){
   const s=useHousehold();
-  const storeKey='tandem/studio/'+String(s.member?.personId);
   const [mode,setMode]=useState('ask'),[text,setText]=useState(''),[busy,setBusy]=useState(false);
-  const [since,setSince]=useState(()=>{try{return Number(sessionStorage.getItem(storeKey)||0)}catch{return 0}});
-  const feedRef=useRef(null),nearBottom=useRef(true),boxRef=useRef(null),inputRef=useRef(null);
+  const [since,setSince]=useState(()=>topId(s)),[mountedAt]=useState(()=>topId(s));
+  const boxRef=useRef(null),inputRef=useRef(null);
   const m=MODES.find(x=>x.key===mode);
   const suggestions=useSuggestions();
-  const rows=(s.myAiInsights||[]).filter(r=>FEED_KINDS.has(r.kind)&&r.status!=='blocked'&&r.status!=='failed'&&Number(r.id)>since).slice().sort((a,b)=>Number(a.id)-Number(b.id)).slice(-12);
+  const all=(s.myAiInsights||[]).filter(r=>FEED_KINDS.has(r.kind)&&!QUICK.some(q=>q.key===r.kind)&&visible(r)).slice().sort((a,b)=>Number(a.id)-Number(b.id));
+  const rows=all.filter(r=>Number(r.id)>since);
+  const past=all.filter(r=>Number(r.id)<=since);
   const lastCoach=[...rows].reverse().find(r=>r.kind==='coach');
   const thread=lastCoach?threadOf(lastCoach):'';
-  const toBottom=()=>{const el=feedRef.current;if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'})};
-  const last=rows[rows.length-1];
-  useEffect(()=>{if(nearBottom.current)toBottom()},[last&&`${String(last.id)}:${last.status}:${(last.resultJson||'').length}`,rows.length]);
-  async function send(modeKey,value,quick){
-    const q=quick?QUICK.find(x=>x.key===quick):null;const mm=q?null:MODES.find(x=>x.key===modeKey);
-    const v=(value??'').trim();if(!q&&!v)return;
-    setBusy(true);nearBottom.current=true;toBottom();
-    try{
-      if(q)await s.act(q.op,{});
-      else await s.act(mm.op,mm.key==='ask'?{message:v,threadInsightId:thread?BigInt(thread):0n}:{[mm.field]:v});
-      setText('');
-    }catch{}finally{setBusy(false);toBottom()}
+  const lastRef=useFollowNewest(rows);
+  async function send(modeKey,value){
+    const mm=MODES.find(x=>x.key===modeKey);const v=(value??'').trim();if(!mm||!v)return;
+    setBusy(true);
+    try{await s.act(mm.op,mm.key==='ask'?{message:v,threadInsightId:thread?BigInt(thread):0n}:{[mm.field]:v});setText('')}catch{}finally{setBusy(false)}
   }
-  // Ask from elsewhere in the app (e.g. "Debate this plan" under the forecast).
+  // Ask from elsewhere in the app (e.g. "Debate it" under a plan).
   useEffect(()=>{const on=e=>{const {mode:md,text:tx}=e.detail||{};if(!md)return;setMode(md);boxRef.current?.scrollIntoView({behavior:'smooth',block:'start'});send(md,tx)};window.addEventListener('nemotron:ask',on);return()=>window.removeEventListener('nemotron:ask',on)});
-  function reset(){const top=Math.max(0,...(s.myAiInsights||[]).map(r=>Number(r.id)));setSince(top);try{sessionStorage.setItem(storeKey,String(top))}catch{}}
   const can=!!s.capabilities?.[m.op];
   return <div className="nemotron-studio" ref={boxRef}>
-    <div className="studio-modes" role="tablist">{MODES.map(x=><button key={x.key} role="tab" aria-selected={mode===x.key} className={mode===x.key?'active':''} onClick={()=>{setMode(x.key);inputRef.current?.focus()}}><x.Icon size={15}/>{x.label}</button>)}<span className="studio-sep"/>{QUICK.map(x=><button key={x.key} className="studio-quick" onClick={()=>send(null,null,x.key)} disabled={busy||!s.capabilities?.[x.op]}><x.Icon size={15}/>{x.label}</button>)}</div>
-    <p className="lab-hint">{m.hint}</p>
-    <div className="studio-feed" ref={feedRef} aria-live="polite" onScroll={e=>{const el=e.currentTarget;nearBottom.current=el.scrollHeight-el.scrollTop-el.clientHeight<80}}>
-      {rows.length===0&&<div className="studio-empty"><p>Try one of these, or type your own:</p><div className="lab-examples">{suggestions.map(x=><button key={x.text} type="button" onClick={()=>{if(x.quick)send(null,null,x.quick);else{setMode(x.mode);send(x.mode,x.text)}}} disabled={busy}>{x.text}</button>)}</div></div>}
-      {rows.map(row=><React.Fragment key={String(row.id)}><div className="coach-bubble coach-user">{row.question}</div><Reply row={row}/></React.Fragment>)}
+    <div className="studio-modes" role="tablist">{MODES.map(x=><button key={x.key} role="tab" aria-selected={mode===x.key} className={mode===x.key?'active':''} onClick={()=>{setMode(x.key);inputRef.current?.focus()}}><x.Icon size={15}/>{x.label}</button>)}</div>
+    <div className="studio-hint-row"><p className="lab-hint">{m.hint}</p><History rows={past}/></div>
+    <div className="studio-feed" aria-live="polite">
+      {rows.length===0&&<div className="studio-empty"><p>Try one of these, or type your own:</p><div className="lab-examples">{suggestions.map(x=><button key={x.text} type="button" onClick={()=>{setMode(x.mode);send(x.mode,x.text)}} disabled={busy}>{x.text}</button>)}</div></div>}
+      {rows.map((row,i)=><div key={String(row.id)} className="studio-turn" ref={i===rows.length-1?lastRef:undefined}><div className="coach-bubble coach-user">{row.question}</div><Reply row={row}/></div>)}
     </div>
     <form className="studio-input" onSubmit={e=>{e.preventDefault();send(mode,text)}}>
       <textarea ref={inputRef} rows={2} value={text} maxLength={300} placeholder={mode==='ask'&&thread?'Ask a follow-up…':m.placeholder} aria-label={m.label}
-        onChange={e=>{setText(e.target.value);nearBottom.current=true;toBottom()}} onFocus={()=>{nearBottom.current=true;toBottom()}}
-        onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form.requestSubmit()}}}/>
+        onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form.requestSubmit()}}}/>
       <div className="studio-actions">
-        {rows.length>0&&<button type="button" className="coach-new" onClick={reset}><RotateCcw size={13}/> New conversation</button>}
+        {rows.length>0&&<button type="button" className="coach-new" onClick={()=>setSince(topId(s))}><RotateCcw size={13}/> New conversation</button>}
         <button className="workspace-button" disabled={busy||!can||!text.trim()}><Send size={15}/> {busy?'Sending…':mode==='ask'?'Send':m.label}</button>
       </div>
     </form>

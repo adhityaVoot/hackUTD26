@@ -67,7 +67,8 @@
 .studio-modes button.active{background:rgba(99,102,241,.18);border-color:rgba(99,102,241,.6);font-weight:600}
 .studio-modes .studio-quick{border-style:dashed}
 .studio-sep{width:1px;height:20px;background:rgba(127,127,127,.35);margin:0 4px}
-.studio-feed{display:flex;flex-direction:column;gap:10px;max-height:620px;overflow-y:auto;padding:4px 2px}
+.studio-feed{display:flex;flex-direction:column;gap:12px;padding:4px 2px}
+.studio-turn{display:flex;flex-direction:column;gap:8px;scroll-margin-top:80px}
 .studio-empty p{margin:0 0 6px;opacity:.75}
 .studio-input{display:flex;flex-direction:column;gap:6px}
 .studio-input textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:52px;padding:10px 12px;border-radius:12px;border:1px solid rgba(127,127,127,.35);background:transparent;color:inherit;font:inherit}
@@ -80,3 +81,17 @@
 .plan-bridge{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
 .plan-bridge span{opacity:.8;font-size:.9rem}
 .plan-bridge button{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;border:1px solid rgba(99,102,241,.5);background:rgba(99,102,241,.1);color:inherit;cursor:pointer;font-size:.85rem}
+
+.studio-actions{flex-wrap:wrap}
+.studio-actions .lab-history{margin-right:auto}
+.lab-history{display:flex;flex-direction:column;gap:8px}
+.lab-history .coach-new{display:inline-flex;align-items:center;gap:4px;align-self:flex-start}
+.lab-history-list{display:flex;flex-direction:column;gap:6px;flex-basis:100%}
+.lab-history-list details{border:1px solid rgba(127,127,127,.2);border-radius:10px;padding:6px 10px}
+.lab-history-list summary{cursor:pointer;font-size:.88rem}
+.lab-history-list summary small{opacity:.6}
+.account-insights{display:flex;flex-direction:column;gap:10px}
+.account-insights > div[ref]{scroll-margin-top:80px}
+.nemotron-lab .coach-user{align-self:flex-end;margin-left:auto;margin-bottom:8px;display:block;width:fit-content}
+.studio-hint-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;justify-content:space-between}
+.studio-hint-row .lab-hint{flex:1 1 260px}
