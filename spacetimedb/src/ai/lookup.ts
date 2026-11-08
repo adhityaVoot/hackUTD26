@@ -11,13 +11,20 @@ export interface Passage {
   text: string;
 }
 
+export interface PricePoint {
+  amount: number; // dollars
+  context: string; // the words around the price, so the model can tell a starting price from an average
+  source: string;
+}
+
 export interface LookupResult {
   query: string;
   passages: Passage[];
+  price_points: PricePoint[];
   note: string;
 }
 
-const MAX_PASSAGES = 3;
+const MAX_PASSAGES = 6;
 const MAX_CHARS = 700;
 
 function cleanQuery(query: string): string {
@@ -94,16 +101,84 @@ function duckDuckGo(http: HttpLike, query: string): Passage[] {
   return out;
 }
 
-/** Retrieves short public passages for a question. Never includes household records. */
+const decode = (s: string) =>
+  s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * Web search through DuckDuckGo's no-JavaScript results page (no API key). Returns organic results
+ * only: sponsored rows and ad links are skipped. Search snippets are where current prices show up.
+ */
+export function webSearch(http: HttpLike, query: string, limit = 5): Passage[] {
+  let page = '';
+  try {
+    const res = http.fetch(`https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`, {
+      method: 'GET',
+      headers: { Accept: 'text/html', 'User-Agent': 'Mozilla/5.0 (compatible; TandemDemo/1.0; household coach)' },
+      body: '',
+    });
+    if (res.status < 200 || res.status >= 300) return [];
+    page = res.text();
+  } catch {
+    return [];
+  }
+  const out: Passage[] = [];
+  const anchors = [...page.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*class=["']result-link["'][^>]*>([\s\S]*?)<\/a>/g)];
+  for (let i = 0; i < anchors.length && out.length < limit; i++) {
+    const [whole, href, rawTitle] = anchors[i];
+    const target = /uddg=([^&]+)/.exec(href);
+    const url = target ? decodeURIComponent(target[1]) : href;
+    if (/duckduckgo\.com\/(y\.js|duckduckgo-help-pages)/.test(url) || !/^https?:\/\//.test(url)) continue; // ads
+    const start = (anchors[i].index ?? 0) + whole.length;
+    const end = anchors[i + 1]?.index ?? page.length;
+    const block = page.slice(start, end);
+    if (/result-sponsored/.test(page.slice(Math.max(0, (anchors[i].index ?? 0) - 300), anchors[i].index ?? 0))) continue;
+    const snippet = /class=["']result-snippet["'][^>]*>([\s\S]*?)<\/td>/.exec(block);
+    const text = clip(decode(snippet?.[1] ?? ''));
+    if (!text) continue;
+    let host = url;
+    try {
+      host = new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      // keep the raw url
+    }
+    out.push({ title: decode(rawTitle).slice(0, 120), source: host, url, text });
+  }
+  return out;
+}
+
+/** Every dollar figure in the passages, with the words around it and where it came from. */
+export function pricePoints(passages: Passage[], max = 12): PricePoint[] {
+  const out: PricePoint[] = [];
+  const seen = new Set<number>();
+  for (const p of passages) {
+    for (const m of p.text.matchAll(/\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?\s*(million|k|thousand)?/gi)) {
+      let n = Number(m[1].replace(/,/g, '') + (m[2] ? `.${m[2]}` : ''));
+      if (/million/i.test(m[3] ?? '')) n *= 1_000_000;
+      else if (/^(k|thousand)$/i.test(m[3] ?? '')) n *= 1_000;
+      n = Math.round(n);
+      if (!Number.isFinite(n) || n < 20 || seen.has(n)) continue;
+      seen.add(n);
+      const i = m.index ?? 0;
+      out.push({ amount: n, context: p.text.slice(Math.max(0, i - 70), i + m[0].length + 50).trim(), source: p.source });
+      if (out.length >= max) return out;
+    }
+  }
+  return out;
+}
+
+/** Retrieves short public passages for a question: web results first, then encyclopedia text. Never includes household records. */
 export function lookupInformation(http: HttpLike, query: string): LookupResult {
   const q = cleanQuery(query);
-  if (q.length < 3) return { query: q, passages: [], note: 'The lookup query was too short.' };
-  const passages = [...wiki(http, q), ...duckDuckGo(http, q)].slice(0, MAX_PASSAGES);
+  if (q.length < 3) return { query: q, passages: [], price_points: [], note: 'The lookup query was too short.' };
+  const web = webSearch(http, q);
+  const passages = [...web, ...wiki(http, q).slice(0, web.length ? 1 : 2), ...(web.length ? [] : duckDuckGo(http, q))].slice(0, MAX_PASSAGES);
+  const prices = pricePoints(passages);
   return {
     query: q,
     passages,
+    price_points: prices,
     note: passages.length
-      ? 'Untrusted public reference text. Use a number only if it is written in a passage. If the figure you need is missing, ask the member.'
+      ? `Untrusted public reference text. Cite a price only from price_points or a passage${prices.length ? '' : ' (none of these passages state a price; try a more specific search like "<item> price" or "<item> under $X")'}. If the figure you need is missing, ask the member.`
       : 'No public passage came back. Ask the member for the figure instead of guessing.',
   };
 }

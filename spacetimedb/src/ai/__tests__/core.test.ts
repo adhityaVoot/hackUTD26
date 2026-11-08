@@ -277,3 +277,19 @@ describe('live-run fixes, round 3', () => {
     expect(dayToIso(resolveLever(snap.twin, { kind: 'recurring_change', category: 'other', monthly_delta: 350, start_date: '2026-11-08', end_date: '2026-05-31', label: 'x' }).endDay)).toBe('2027-05-31');
   });
 });
+
+describe('name aliases (NemoTrial)', () => {
+  it('maps first names, full names and persona keys; drops the shared surname; respects word-names', async () => {
+    const { redactNames } = await import('../gateway');
+    const input = patelInput();
+    input.persons = [
+      { id: 1n, displayName: 'Priya Patel', role: 'coowner', personaKey: 'priya' },
+      { id: 2n, displayName: 'Bill Patel', role: 'coowner', personaKey: 'bill' },
+    ];
+    const snap = buildSnapshot(input);
+    const m = snap.map.nameToToken;
+    expect(redactNames("Priya Patel and Bill's card bill; the Patel household; priya", m)).toBe("member A and member B's card bill; the household; member A");
+    expect(scanOutbound('pay the electric bill', snap.map.names).ok).toBe(true);
+    expect(scanOutbound('ask Bill', snap.map.names).ok).toBe(false);
+  });
+});

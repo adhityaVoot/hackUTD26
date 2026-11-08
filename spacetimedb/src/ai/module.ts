@@ -15,6 +15,7 @@ import { SenderError, t } from 'spacetimedb/server';
 import type Spacetimedb from '../index';
 import { envValue, requireAdmin, requireMember, type Ctx } from '../auth';
 import { runAgent } from './agent';
+import { DISCLAIMER } from './prompts';
 import { recomputeScenario } from '../recompute';
 import { DEFAULT_BASE_URL, DEFAULT_MODEL, type HttpLike, type ModelConfig } from './model';
 import { buildSnapshot, type SnapshotInput, type Snapshot } from './snapshot';
@@ -193,7 +194,12 @@ function loadJob(tx: Ctx, runId: bigint): Loaded | null {
     const turns = [...tx.db.aiInsight.householdId.filter(hid)]
       .filter(i => i.id !== insight.id && i.requesterPersonId === run.requesterPersonId && (String(i.id) === ctxIn.threadId || JSON.parse(i.contextJson || '{}').threadId === ctxIn.threadId) && i.resultJson)
       .sort((a, b) => Number(a.id - b.id));
-    for (const i of turns.slice(-3)) history.push({ question: i.question, answer: String(JSON.parse(i.resultJson).answer ?? '') });
+    for (const i of turns.slice(-3)) {
+      // Keep what the coach asked or suggested, so "that budget" or an answer to its questions makes sense next turn.
+      const r = JSON.parse(i.resultJson) as { kind?: string; answer?: string; followUp?: string; extra?: { questions?: string[] } };
+      const asked = [...(r.extra?.questions ?? []), r.followUp ?? ''].filter(Boolean).join(' ');
+      history.push({ question: i.question, answer: `${r.answer ?? ''}${asked ? ` ${asked}` : ''}`.trim(), clarified: r.kind === 'clarify' });
+    }
   }
   const nessieKey = envValue(tx, 'NESSIE_API_KEY');
 
@@ -233,7 +239,7 @@ function snapshotInputFor(tx: Ctx, hid: bigint, requester: bigint, today: number
     today,
     nowMicros: tx.timestamp.microsSinceUnixEpoch,
     requesterPersonId: requester,
-    persons: [...tx.db.person.householdId.filter(hid)].map(p => ({ id: p.id, displayName: p.displayName, role: p.role })),
+    persons: [...tx.db.person.householdId.filter(hid)].map(p => ({ id: p.id, displayName: p.displayName, role: p.role, personaKey: p.personaKey })),
     accounts: visibleAccounts,
     grants: [...inherited,...[...tx.db.grant.householdId.filter(hid)].map(g => ({
       accountId: g.accountId,
@@ -560,22 +566,44 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
       let feature = loaded.kind;
       let request = loaded.question;
       let routeSteps: { step: string; detail: string; flagged: boolean }[] = [];
+      let clarify: { message: string; questions: string[] } | undefined;
       if (feature === 'coach') {
         const route = routeCoach(loaded.question, loaded.history, snap.map.nameToToken, deps);
         feature = route.feature;
         request = route.request;
         routeSteps = route.steps;
+        clarify = route.clarify;
       }
-      const state = newState(feature, snap, request, loaded.memoryRows, loaded.context);
-      if (loaded.bank) state.bank = nessieBank(http, loaded.bank, snap, loaded.snapInput.accounts);
-      state.steps.push(...routeSteps);
-      const outcome = runAgent(state, deps);
-      result = outcome.result;
-      status = outcome.status;
-      steps = outcome.steps;
-      audit = outcome.auditPayload;
-      if (loaded.kind === 'coach') result.extra = { ...(result.extra ?? {}), routedTo: feature, threadTurns: loaded.history.length + 1 };
-      steps.push({ step: 'usage', detail: `${outcome.modelCalls} model call(s), ${outcome.promptTokens} prompt + ${outcome.completionTokens} completion tokens`, flagged: false });
+      // Coach turns carry the conversation so far, so replies can build on earlier answers.
+      const runContext = loaded.kind === 'coach' && loaded.history.length ? { ...loaded.context, conversation: loaded.history } : loaded.context;
+      if (clarify) {
+        // Too vague to answer confidently: ask instead of simulating guesses.
+        result = {
+          kind: 'clarify',
+          title: 'A few questions first',
+          answer: clarify.message,
+          followUp: clarify.questions.length === 1 ? clarify.questions[0] : undefined,
+          highlights: [],
+          sections: [{ heading: 'To plan this properly', items: clarify.questions }],
+          scenarios: [],
+          extra: { questions: clarify.questions, routedTo: feature, threadTurns: loaded.history.length + 1 },
+          source: loaded.primary ? 'nemotron' : 'fallback',
+          disclaimer: DISCLAIMER,
+        };
+        status = 'done';
+        steps = routeSteps;
+      } else {
+        const state = newState(feature, snap, request, loaded.memoryRows, runContext);
+        if (loaded.bank) state.bank = nessieBank(http, loaded.bank, snap, loaded.snapInput.accounts);
+        state.steps.push(...routeSteps);
+        const outcome = runAgent(state, deps);
+        result = outcome.result;
+        status = outcome.status;
+        steps = outcome.steps;
+        audit = outcome.auditPayload;
+        if (loaded.kind === 'coach') result.extra = { ...(result.extra ?? {}), routedTo: feature, threadTurns: loaded.history.length + 1 };
+        steps.push({ step: 'usage', detail: `${outcome.modelCalls} model call(s), ${outcome.promptTokens} prompt + ${outcome.completionTokens} completion tokens`, flagged: false });
+      }
     } catch (e) {
       ctx.withTx(tx => {
         const run = tx.db.aiRun.id.find(loaded.runId);
