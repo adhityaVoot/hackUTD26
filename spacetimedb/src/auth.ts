@@ -12,6 +12,10 @@ type EnvKey =
   | 'AI_API_KEY'
   | 'AI_BASE_URL'
   | 'AI_MODEL'
+  | 'AI_NO_THINK'
+  | 'AI_FALLBACK_API_KEY'
+  | 'AI_FALLBACK_BASE_URL'
+  | 'AI_FALLBACK_MODEL'
   | 'NESSIE_API_KEY'
   | 'NESSIE_BASE_URL'
   | 'ADMIN_CODE';

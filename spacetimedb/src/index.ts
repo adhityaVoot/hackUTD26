@@ -39,6 +39,8 @@ import {
   txn,
   vital,
 } from './tables';
+import { registerNemotron } from './ai/module';
+import { aiInsight, decisionMemory, negotiation, negotiationPosition } from './ai/tables';
 
 const spacetimedb = schema(
   {
@@ -72,12 +74,20 @@ const spacetimedb = schema(
     clockTick,
     dailyMaintenance,
     backtestResult,
+    aiInsight,
+    decisionMemory,
+    negotiation,
+    negotiationPosition,
   },
   {
     env: {
       AI_API_KEY: t.string().optional(),
       AI_BASE_URL: t.string().optional(),
       AI_MODEL: t.string().optional(),
+      AI_NO_THINK: t.string().optional(),
+      AI_FALLBACK_API_KEY: t.string().optional(),
+      AI_FALLBACK_BASE_URL: t.string().optional(),
+      AI_FALLBACK_MODEL: t.string().optional(),
       NESSIE_API_KEY: t.string().optional(),
       NESSIE_BASE_URL: t.string().optional(),
       ADMIN_CODE: t.string().optional(),
@@ -140,3 +150,28 @@ export const myMember = spacetimedb.view(
     };
   },
 );
+
+// Nemotron features: Digital Twin, Ripple Effect, Negotiation Room, Stress Test,
+// Life Event Simulator, Financial Memory, Opportunity Radar. See src/ai/module.ts.
+export const {
+  askTwin,
+  simulateRipple,
+  stressTest,
+  simulateLifeEvent,
+  askMemory,
+  scanOpportunities,
+  openNegotiation,
+  submitPosition,
+  requestMediation,
+  closeNegotiation,
+  recordDecision,
+  shareInsight,
+  setAiEnabled,
+  seedNemotronDemo,
+  runAiJob,
+  myAiInsights,
+  myAgentLog,
+  myDecisions,
+  myNegotiations,
+  myNegotiationPositions,
+} = registerNemotron(spacetimedb);
