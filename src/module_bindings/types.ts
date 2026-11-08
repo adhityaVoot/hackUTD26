@@ -50,6 +50,34 @@ export const AgentLog = __t.object("AgentLog", {
 });
 export type AgentLog = __Infer<typeof AgentLog>;
 
+export const AgentLogEntry = __t.object("AgentLogEntry", {
+  id: __t.u64(),
+  runId: __t.u64(),
+  step: __t.string(),
+  detail: __t.string(),
+  flagged: __t.bool(),
+  at: __t.timestamp(),
+});
+export type AgentLogEntry = __Infer<typeof AgentLogEntry>;
+
+export const AiInsight = __t.object("AiInsight", {
+  id: __t.u64(),
+  runId: __t.u64(),
+  householdId: __t.u64(),
+  requesterPersonId: __t.u64(),
+  audiencePersonId: __t.u64(),
+  kind: __t.string(),
+  question: __t.string(),
+  contextJson: __t.string(),
+  status: __t.string(),
+  title: __t.string(),
+  resultJson: __t.string(),
+  scenarioId: __t.u64(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type AiInsight = __Infer<typeof AiInsight>;
+
 export const AiJob = __t.object("AiJob", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
@@ -164,6 +192,21 @@ export const DailyMaintenance = __t.object("DailyMaintenance", {
   scheduledAt: __t.scheduleAt(),
 });
 export type DailyMaintenance = __Infer<typeof DailyMaintenance>;
+
+export const DecisionMemory = __t.object("DecisionMemory", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  day: __t.i32(),
+  scenarioId: __t.u64(),
+  outcome: __t.string(),
+  title: __t.string(),
+  reasoning: __t.string(),
+  tags: __t.string(),
+  amountCents: __t.i64(),
+  authorPersonId: __t.u64(),
+  createdAt: __t.timestamp(),
+});
+export type DecisionMemory = __Infer<typeof DecisionMemory>;
 
 export const ForecastDay = __t.object("ForecastDay", {
   id: __t.u64(),
@@ -320,8 +363,17 @@ export type MemberSession = __Infer<typeof MemberSession>;
 export const MyAccounts = __t.object("MyAccounts", {});
 export type MyAccounts = __Infer<typeof MyAccounts>;
 
+export const MyAgentLog = __t.object("MyAgentLog", {});
+export type MyAgentLog = __Infer<typeof MyAgentLog>;
+
+export const MyAiInsights = __t.object("MyAiInsights", {});
+export type MyAiInsights = __Infer<typeof MyAiInsights>;
+
 export const MyAlerts = __t.object("MyAlerts", {});
 export type MyAlerts = __Infer<typeof MyAlerts>;
+
+export const MyDecisions = __t.object("MyDecisions", {});
+export type MyDecisions = __Infer<typeof MyDecisions>;
 
 export const MyForecast = __t.object("MyForecast", {});
 export type MyForecast = __Infer<typeof MyForecast>;
@@ -338,6 +390,12 @@ export type MyInviteCode = __Infer<typeof MyInviteCode>;
 export const MyMember = __t.object("MyMember", {});
 export type MyMember = __Infer<typeof MyMember>;
 
+export const MyNegotiationPositions = __t.object("MyNegotiationPositions", {});
+export type MyNegotiationPositions = __Infer<typeof MyNegotiationPositions>;
+
+export const MyNegotiations = __t.object("MyNegotiations", {});
+export type MyNegotiations = __Infer<typeof MyNegotiations>;
+
 export const MyObligations = __t.object("MyObligations", {});
 export type MyObligations = __Infer<typeof MyObligations>;
 
@@ -346,6 +404,48 @@ export type MyTxns = __Infer<typeof MyTxns>;
 
 export const MyVitals = __t.object("MyVitals", {});
 export type MyVitals = __Infer<typeof MyVitals>;
+
+export const Negotiation = __t.object("Negotiation", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  topic: __t.string(),
+  status: __t.string(),
+  openedByPersonId: __t.u64(),
+  insightId: __t.u64(),
+  createdAt: __t.timestamp(),
+});
+export type Negotiation = __Infer<typeof Negotiation>;
+
+export const NegotiationPosition = __t.object("NegotiationPosition", {
+  id: __t.u64(),
+  negotiationId: __t.u64(),
+  householdId: __t.u64(),
+  personId: __t.u64(),
+  want: __t.string(),
+  priority: __t.u8(),
+  updatedAt: __t.timestamp(),
+});
+export type NegotiationPosition = __Infer<typeof NegotiationPosition>;
+
+export const NemotronJob = __t.object("NemotronJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  runId: __t.u64(),
+});
+export type NemotronJob = __Infer<typeof NemotronJob>;
+
+export const NemotronWatch = __t.object("NemotronWatch", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type NemotronWatch = __Infer<typeof NemotronWatch>;
+
+export const NemotronWatchState = __t.object("NemotronWatchState", {
+  householdId: __t.u64(),
+  lastBriefingDay: __t.i32(),
+  lastSentinelDay: __t.i32(),
+});
+export type NemotronWatchState = __Infer<typeof NemotronWatchState>;
 
 export const NessieJob = __t.object("NessieJob", {
   scheduledId: __t.u64(),
