@@ -77,6 +77,8 @@ describe.skipIf(!LIVE)('live Nemotron', () => {
           http: curlHttp,
           primary: { baseUrl: process.env.NEMOTRON_BASE_URL ?? DEFAULT_BASE_URL, apiKey: KEY!, model: process.env.NEMOTRON_MODEL ?? DEFAULT_MODEL, noThink: process.env.NEMOTRON_THINK !== '1' },
           secondary: null,
+          // Wait out free-tier rate limits like the procedure does with ctx.sleep.
+          sleep: (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
         };
         const householdView = feature === 'negotiation' || feature === 'briefing';
         // Sentinel needs a crunch: a cash-strapped version of the household.

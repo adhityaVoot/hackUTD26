@@ -186,7 +186,10 @@ describe('live-run fixes', () => {
     expect(() => resolveLever(snap.twin, { kind: 'pause_obligation', obligation: visa.token, start_date: '2026-12-01' })).toThrow(/can't be skipped/);
     const joint = snap.twin.accounts.find(a => a.kind === 'checking')!;
     expect(() => resolveLever(snap.twin, { kind: 'transfer', from: joint.token, to: 'goal_2', amount: 5, date: '2026-12-01' })).toThrow(/funded from monthly surplus/);
-    expect(() => resolveLever(snap.twin, { kind: 'one_time', amount: 5, date: '2026-06-01', label: 'x' })).toThrow(/Did you mean 2027-06-01/);
+    // "June" written as last June rolls forward to next June; yesterday snaps to tomorrow.
+    expect(dayToIso(resolveLever(snap.twin, { kind: 'one_time', amount: 5, date: '2026-06-01', label: 'x' }).day)).toBe('2027-06-01');
+    expect(resolveLever(snap.twin, { kind: 'one_time', amount: 5, date: '2026-11-06', label: 'x' }).day).toBe(TODAY + 1);
+    expect(resolveLever(snap.twin, { kind: 'recurring_change', category: 'dining', monthly_delta: -100, label: 'x' } as any).day).toBe(TODAY + 1);
   });
 });
 
@@ -207,6 +210,7 @@ describe('live-run fixes, round 3', () => {
   });
   it('suggests next year when an end date lands before the start', () => {
     const snap = buildSnapshot(patelInput());
-    expect(() => resolveLever(snap.twin, { kind: 'recurring_change', category: 'other', monthly_delta: 350, start_date: '2026-11-08', end_date: '2026-05-31', label: 'x' })).toThrow(/Did you mean 2027-05-31/);
+    // "Through May" written as last May rolls to next May.
+    expect(dayToIso(resolveLever(snap.twin, { kind: 'recurring_change', category: 'other', monthly_delta: 350, start_date: '2026-11-08', end_date: '2026-05-31', label: 'x' }).endDay)).toBe('2027-05-31');
   });
 });

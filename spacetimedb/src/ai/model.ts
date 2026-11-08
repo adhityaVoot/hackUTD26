@@ -9,6 +9,7 @@
 
 export const DEFAULT_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 export const DEFAULT_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b';
+const RETRY_DELAYS_MS = [2_000, 5_000, 10_000];
 
 export interface HttpResponseLike {
   status: number;
@@ -55,6 +56,8 @@ export interface ChatOptions {
   temperature?: number;
   timeout?: unknown; // TimeDuration inside SpacetimeDB; ignored by test shims
   jsonMode?: boolean;
+  /** Blocking sleep (ctx.sleep inside SpacetimeDB). Enables waiting and retrying on HTTP 429/503. */
+  sleep?: (ms: number) => void;
 }
 
 export interface ChatResult {
@@ -149,21 +152,30 @@ export function chat(http: HttpLike, cfg: ModelConfig, messages: ChatMessage[], 
   });
 
   let res: HttpResponseLike;
-  try {
-    res = http.fetch(`${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json',
-        authorization: `Bearer ${cfg.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      timeout: opts.timeout,
-    });
-  } catch (e) {
-    return fail(`network error: ${String(e).slice(0, 200)}`);
+  let text = '';
+  // Free-tier endpoints rate-limit bursts (HTTP 429). Wait and retry a few times before giving up.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = http.fetch(`${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          authorization: `Bearer ${cfg.apiKey}`,
+        },
+        body: JSON.stringify(body),
+        timeout: opts.timeout,
+      });
+    } catch (e) {
+      return fail(`network error: ${String(e).slice(0, 200)}`);
+    }
+    text = res.text();
+    if ((res.status === 429 || res.status === 503) && opts.sleep && attempt < RETRY_DELAYS_MS.length) {
+      opts.sleep(RETRY_DELAYS_MS[attempt]);
+      continue;
+    }
+    break;
   }
-  const text = res.text();
   if (res.status < 200 || res.status >= 300) {
     const toolsUnsupported = res.status === 400 && /tool/i.test(text);
     return fail(`HTTP ${res.status}: ${text.slice(0, 300)}`, res.status, toolsUnsupported);
@@ -180,7 +192,8 @@ export function chat(http: HttpLike, cfg: ModelConfig, messages: ChatMessage[], 
     ok: true,
     message: {
       role: 'assistant',
-      content: typeof msg.content === 'string' ? stripThinking(msg.content) : null,
+      // Some Nemotron builds put the reply in reasoning_content when content is empty.
+      content: typeof msg.content === 'string' && msg.content.trim() ? stripThinking(msg.content) : typeof msg.reasoning_content === 'string' && msg.reasoning_content.includes('{') ? stripThinking(msg.reasoning_content) : typeof msg.content === 'string' ? msg.content : null,
       tool_calls: Array.isArray(msg.tool_calls) && msg.tool_calls.length ? msg.tool_calls : undefined,
     },
     error: '',

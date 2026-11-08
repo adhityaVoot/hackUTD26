@@ -70,7 +70,7 @@ function reducerCtx(person: bigint) {
   return { sender: ids[String(person)], timestamp: NOW, db: store.db, env, random: () => 0.5, connectionId: null } as any;
 }
 function procCtx(http: HttpLike) {
-  return { sender: new Identity(1n), timestamp: NOW, http, env, withTx: (fn: any) => fn({ ...reducerCtx(PRIYA), sender: new Identity(1n) }) } as any;
+  return { sender: new Identity(1n), timestamp: NOW, http, env, sleep: () => {}, withTx: (fn: any) => fn({ ...reducerCtx(PRIYA), sender: new Identity(1n) }) } as any;
 }
 
 function seed() {

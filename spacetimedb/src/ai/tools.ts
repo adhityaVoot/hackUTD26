@@ -208,8 +208,18 @@ export function toolsFor(feature: FeatureKind): ToolSpec[] {
 
 // ---------- Executors ----------
 
+const BAND_RULES: Record<string, string> = {
+  runway: 'green at 3+ months, yellow 1-3 months, red under 1 month',
+  crunch_risk: 'green under 10%, yellow 10-25%, red over 25%',
+  dti: 'green at 36% or less, yellow 36-43%, red over 43%',
+  utilization: 'green at 30% or less, yellow 30-50%, red over 50%',
+  savings_rate: 'green at 15%+, yellow 5-15%, red under 5%',
+  goal_track: 'green on time, yellow up to 3 months late, red more than 3 months late',
+  score: 'green 70+, yellow 50-69, red under 50',
+};
+
 export function vitalsView(r: TwinResult) {
-  return r.vitals.map(v => ({ vital: v.key, value: v.display, band: v.band }));
+  return r.vitals.map(v => ({ vital: v.key, value: v.display, band: v.band, bands: BAND_RULES[v.key] }));
 }
 
 export function forecastSummary(state: AgentState) {

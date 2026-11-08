@@ -22,6 +22,7 @@ export interface AgentDeps {
   primary: ModelConfig | null; // null = AI off (kill switch or no key)
   secondary: ModelConfig | null;
   timeout?: unknown;
+  sleep?: (ms: number) => void; // lets the client wait out rate limits
   maxSteps?: number;
   maxRetries?: number;
 }
@@ -135,6 +136,7 @@ export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
       maxTokens: 1600,
       temperature: 0.2,
       timeout: deps.timeout,
+      sleep: deps.sleep,
     });
     modelCalls++;
     promptTokens += res.promptTokens;
@@ -184,7 +186,16 @@ export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
     }
 
     const answer = protocolMode && parsed?.final ? parsed.final : parsed;
-    log(state, 'parse', answer ? 'final answer received' : 'reply was not JSON', !answer);
+    log(state, 'parse', answer ? 'final answer received' : `reply was not JSON: "${(msg.content ?? '').replace(/\s+/g, ' ').slice(0, 160)}"`, !answer);
+    if (!answer && !forcedFinal) {
+      // Prose instead of JSON: stop tool use and ask for the JSON object alone.
+      forcedFinal = true;
+      if (retries >= maxRetries) return fallBack('model did not return JSON', 'fallback', firstUser);
+      retries++;
+      messages.push({ role: 'assistant', content: msg.content ?? '' });
+      messages.push({ role: 'user', content: `That reply was not JSON. Reply with ONLY the final JSON object${protocolMode ? ' as {"final": ...}' : ''}, starting with { and ending with }. No other text.` });
+      continue;
+    }
     const fin = finalize(state, answer, res.model);
     if (fin.result) {
       log(state, 'verify', `passed: ${fin.result.scenarios.length} fork(s) re-checked against the engine; every number in the text traced to engine output`);
@@ -249,7 +260,7 @@ export function routeCoach(message: string, history: CoachTurn[], names: Map<str
     steps.push({ step: 'pii_scan', detail: `router payload blocked: ${scan.reason}`, flagged: true });
     return rules('privacy scan');
   }
-  const res = chat(deps.http, deps.primary, [{ role: 'system', content: ROUTER_PROMPT }, { role: 'user', content: user }], { maxTokens: 300, temperature: 0, timeout: deps.timeout });
+  const res = chat(deps.http, deps.primary, [{ role: 'system', content: ROUTER_PROMPT }, { role: 'user', content: user }], { maxTokens: 300, temperature: 0, timeout: deps.timeout, sleep: deps.sleep });
   if (!res.ok) return rules(`model unavailable: ${res.error.slice(0, 60)}`);
   const parsed = extractJson(res.message?.content ?? '') as { workflow?: string; request?: string } | null;
   const feature = parsed?.workflow as FeatureKind;

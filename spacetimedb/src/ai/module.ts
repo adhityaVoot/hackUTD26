@@ -545,7 +545,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
         fetch: (url, init) =>
           ctx.http.fetch(url, { method: init.method, headers: init.headers, body: init.method === 'GET' ? undefined : init.body, timeout: (init.timeout as TimeDuration | undefined) ?? TimeDuration.fromMillis(MODEL_TIMEOUT_MS) }),
       };
-      const deps = { http, primary: loaded.primary, secondary: loaded.secondary };
+      const deps = { http, primary: loaded.primary, secondary: loaded.secondary, sleep: (ms: number) => ctx.sleep(TimeDuration.fromMillis(ms)) };
       // Conversational coach: Nemotron first decides which workflow answers the message.
       let feature = loaded.kind;
       let request = loaded.question;

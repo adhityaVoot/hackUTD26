@@ -236,3 +236,36 @@ describe('new Nemotron features', () => {
     expect(out.cushion_above_buffer_after).toBe(out.lowest_cash_after - 800);
   });
 });
+
+describe('live-run fixes, round 4', () => {
+  it('waits and retries on HTTP 429, then succeeds', () => {
+    const waits: number[] = [];
+    let n = 0;
+    const http = { fetch: () => (n++ < 2 ? { status: 429, text: () => '{"title":"Too Many Requests"}' } : { status: 200, text: () => JSON.stringify(final({ title: 'x', answer: 'Nothing recorded.', cited: [], commitments: [], still_relevant: '' })) }) };
+    const out = runAgent(state('memory', 'why?'), { http, primary: cfg, secondary: null, sleep: ms => waits.push(ms) });
+    expect(waits).toEqual([2000, 5000]);
+    expect(out.status).toBe('done');
+  });
+
+  it('recovers from a prose reply and reads JSON from reasoning_content', () => {
+    const http = fakeHttp([
+      () => ({ body: { choices: [{ message: { content: 'Here is what I found about the car.' } }] } }),
+      () => ({ body: { choices: [{ message: { content: '', reasoning_content: JSON.stringify({ title: 'Car', answer: 'Nothing recorded.', cited: [], commitments: [], still_relevant: '' }) } }] } }),
+    ]);
+    const out = runAgent(state('memory', 'why?'), { http, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(out.steps.some(s => s.step === 'parse' && /Here is what I found/.test(s.detail))).toBe(true);
+    expect(http.sent[1].tools).toBeUndefined();
+  });
+
+  it('tells the model when a slot names a fork it never simulated', () => {
+    const http = fakeHttp([() => ({ body: final({ title: 'B', answer: 'All steady.', upcoming: [], watch_out: [], fix_why: 'Saves {sim_1.monthly_surplus_after}.' }) })]);
+    const out = runAgent(state('briefing', 'weekly', { mode: 'weekly' }), { http, primary: cfg, secondary: null, maxRetries: 0 });
+    expect(out.steps.some(s => s.step === 'verify' && /sim_1 does not exist; call simulate_scenario first/.test(s.detail))).toBe(true);
+  });
+
+  it('get_vitals includes the band rules so thresholds are citable', () => {
+    const v = executeTool(state('health', 'x'), 'get_vitals', {}) as any;
+    expect(v.vitals.find((x: any) => x.vital === 'utilization').bands).toContain('30%');
+  });
+});

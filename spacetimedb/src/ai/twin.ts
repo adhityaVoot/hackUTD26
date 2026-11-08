@@ -68,9 +68,13 @@ function day(data: TwinData, iso: unknown, name: string, optional = false): numb
   // Accept 2026-11-14T00:00:00Z and 2026/11/14 too.
   const d = isoToDay(iso.trim().slice(0, 10).replace(/\//g, '-'));
   if (d === null) throw new LeverError(`${name} "${iso}" is not a date; use YYYY-MM-DD`);
-  if (d < data.today - 1 && name !== 'end_date') {
-    const nextYear = `${Number(iso.slice(0, 4)) + 1}${iso.trim().slice(4, 10)}`;
-    throw new LeverError(`${name} ${iso} is in the past; today is ${dayToIso(data.today)}. Did you mean ${nextYear}?`);
+  // "March" written as last March: roll forward a year at a time (models often assume the wrong year).
+  let rolled = d;
+  for (let y = 1; d < data.today - 30 && rolled < data.today && y <= 3; y++) rolled = isoToDay(`${Number(iso.slice(0, 4)) + y}${iso.trim().slice(4, 10)}`) ?? rolled;
+  if (rolled >= data.today) {
+    const snappedRolled = Math.max(rolled, data.today + 1);
+    if (snappedRolled > data.today + MAX_LEVER_DAYS) throw new LeverError(`${name} is more than 2 years out`);
+    return snappedRolled;
   }
   // Dates in the past snap to tomorrow: "this month" questions are common.
   const snapped = Math.max(d, data.today + 1);
@@ -142,8 +146,8 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
   // Models mix up date field names; accept either.
   l.date ??= l.start_date;
   l.start_date ??= l.date;
-  // "Pay it down" / "move it" / "pause it" without a date means: starting tomorrow.
-  if (['transfer', 'extra_payment', 'pause_obligation'].includes(lever.kind)) {
+  // "Pay it down" / "trim dining" / "pause it" without a date means: starting tomorrow.
+  if (['transfer', 'extra_payment', 'pause_obligation', 'recurring_change'].includes(lever.kind)) {
     l.date ??= dayToIso(data.today + 1);
     l.start_date ??= l.date;
   }

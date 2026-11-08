@@ -73,7 +73,7 @@ export function fillSlots(text: string, state: AgentState): { text: string; unkn
       obj = sim ? (diffView(sim) as Record<string, unknown>) : undefined;
     }
     if (!obj) {
-      unknown.push(m);
+      unknown.push(src.startsWith('sim_') ? `${m} (${src} does not exist; call simulate_scenario first, or drop that sentence)` : m);
       return m;
     }
     if (b) {
