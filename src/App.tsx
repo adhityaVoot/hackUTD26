@@ -1,47 +1,64 @@
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { tables } from './module_bindings/index.ts';
+import { ToastProvider } from './lib/toast.tsx';
+import { LiveProvider } from './kitchen/live.tsx';
 import KitchenTable from './kitchen/KitchenTable.jsx';
-import './styles/live.css';
+import { JoinScreen } from './screens/Join.tsx';
+import { SetupScreen } from './screens/Setup.tsx';
+import { PrivacyScreen } from './screens/Privacy.tsx';
+import { VitalsScreen } from './screens/Vitals.tsx';
+import './styles/app.css';
 
-const HOST = import.meta.env.VITE_SPACETIMEDB_HOST ?? 'ws://localhost:3000';
-const DB_NAME = import.meta.env.VITE_SPACETIMEDB_DB_NAME ?? 'tandem-hackutd';
+const OPEN_PATHS = new Set(['/join', '/setup']);
 
-function shortHex(hex: string): string {
-  if (hex.length <= 14) return hex;
-  return `${hex.slice(0, 6)}…${hex.slice(-4)}`;
+function Shell() {
+  const location = useLocation();
+  const { isActive } = useSpacetimeDB();
+  const [members, membersReady] = useTable(tables.myMember);
+  const me = members[0];
+  const open = OPEN_PATHS.has(location.pathname);
+
+  if (!isActive || !membersReady) {
+    return (
+      <main className="app">
+        <p className="muted">Connecting…</p>
+      </main>
+    );
+  }
+  if (!me && !open) return <Navigate to="/join" replace />;
+  if (!me) {
+    return (
+      <Routes>
+        <Route path="/join" element={<JoinScreen />} />
+        <Route path="/setup" element={<SetupScreen />} />
+        <Route path="*" element={<Navigate to="/join" replace />} />
+      </Routes>
+    );
+  }
+  return (
+    <LiveProvider>
+      <nav className="kitchen-links" aria-label="More">
+        <Link to="/">Kitchen Table</Link>
+        <Link to="/vitals">Vitals</Link>
+        <Link to="/privacy">Privacy</Link>
+      </nav>
+      <Routes>
+        <Route path="/vitals" element={<VitalsScreen />} />
+        <Route path="/privacy" element={<PrivacyScreen />} />
+        <Route path="/setup" element={<SetupScreen />} />
+        <Route path="*" element={<KitchenTable />} />
+      </Routes>
+    </LiveProvider>
+  );
 }
 
 export default function App() {
-  const { isActive, identity, connectionId, connectionError } = useSpacetimeDB();
-  const [members, membersReady] = useTable(tables.myMember);
-  const me = members[0];
-  const status = connectionError ? 'error' : isActive ? 'connected' : 'connecting';
-  const label = connectionError
-    ? 'Connection error'
-    : isActive
-      ? 'Connected'
-      : 'Connecting';
-  const membership = !membersReady
-    ? 'my_member subscribing'
-    : me
-      ? `my_member live · ${me.displayName} · ${me.role}`
-      : 'my_member live · no household row yet';
-
   return (
-    <>
-      <KitchenTable />
-      <aside className={`live-link ${status}`} aria-live="polite">
-        <i className="live-dot" aria-hidden="true" />
-        <strong>SpacetimeDB · {label}</strong>
-        <span>{DB_NAME}</span>
-        <span>{HOST}</span>
-        <span>
-          identity {identity ? shortHex(identity.toHexString()) : 'pending'}
-        </span>
-        <span>connection {shortHex(connectionId.toHexString())}</span>
-        <span>{membership}</span>
-        {connectionError ? <span>{connectionError.message}</span> : null}
-      </aside>
-    </>
+    <ToastProvider>
+      <BrowserRouter>
+        <Shell />
+      </BrowserRouter>
+    </ToastProvider>
   );
 }

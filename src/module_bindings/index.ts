@@ -34,20 +34,140 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AddAccountReducer from "./add_account_reducer";
+import AddChangeReducer from "./add_change_reducer";
+import AddGoalReducer from "./add_goal_reducer";
+import AddObligationReducer from "./add_obligation_reducer";
+import AddPersonReducer from "./add_person_reducer";
+import AddTransactionReducer from "./add_transaction_reducer";
 import AdminSeedDemoReducer from "./admin_seed_demo_reducer";
+import CreateGrantReducer from "./create_grant_reducer";
+import CreateHouseholdReducer from "./create_household_reducer";
+import ForkReducer from "./fork_reducer";
 import JoinHouseholdReducer from "./join_household_reducer";
+import ProposeReducer from "./propose_reducer";
+import RemoveAccountReducer from "./remove_account_reducer";
+import RemoveChangeReducer from "./remove_change_reducer";
+import RemoveGoalReducer from "./remove_goal_reducer";
+import RemoveObligationReducer from "./remove_obligation_reducer";
+import RenewGrantReducer from "./renew_grant_reducer";
+import RevokeGrantReducer from "./revoke_grant_reducer";
+import SetAiEnabledReducer from "./set_ai_enabled_reducer";
+import SetMonthlySpendingReducer from "./set_monthly_spending_reducer";
 import SetPinReducer from "./set_pin_reducer";
+import UpdateAccountReducer from "./update_account_reducer";
+import VoteReducer from "./vote_reducer";
 
 // Import all procedure arg schemas
 import * as VerifyPinProcedure from "./verify_pin_procedure";
 
 // Import all table schema definitions
+import HouseholdApprovalsRow from "./household_approvals_table";
+import HouseholdCommitmentsRow from "./household_commitments_table";
+import HouseholdConsentLogRow from "./household_consent_log_table";
+import HouseholdPeopleRow from "./household_people_table";
+import HouseholdPresenceRow from "./household_presence_table";
+import HouseholdScenariosRow from "./household_scenarios_table";
+import MyAccountsRow from "./my_accounts_table";
+import MyAlertsRow from "./my_alerts_table";
+import MyForecastRow from "./my_forecast_table";
+import MyGrantsRow from "./my_grants_table";
+import MyHouseholdRow from "./my_household_table";
+import MyInviteCodeRow from "./my_invite_code_table";
 import MyMemberRow from "./my_member_table";
+import MyObligationsRow from "./my_obligations_table";
+import MyTxnsRow from "./my_txns_table";
+import MyVitalsRow from "./my_vitals_table";
+import ScenarioChangesRow from "./scenario_changes_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  householdApprovals: __table({
+    name: 'household_approvals',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, HouseholdApprovalsRow),
+  householdCommitments: __table({
+    name: 'household_commitments',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, HouseholdCommitmentsRow),
+  householdConsentLog: __table({
+    name: 'household_consent_log',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, HouseholdConsentLogRow),
+  householdPeople: __table({
+    name: 'household_people',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, HouseholdPeopleRow),
+  householdPresence: __table({
+    name: 'household_presence',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, HouseholdPresenceRow),
+  householdScenarios: __table({
+    name: 'household_scenarios',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, HouseholdScenariosRow),
+  myAccounts: __table({
+    name: 'my_accounts',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAccountsRow),
+  myAlerts: __table({
+    name: 'my_alerts',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAlertsRow),
+  myForecast: __table({
+    name: 'my_forecast',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyForecastRow),
+  myGrants: __table({
+    name: 'my_grants',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyGrantsRow),
+  myHousehold: __table({
+    name: 'my_household',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyHouseholdRow),
+  myInviteCode: __table({
+    name: 'my_invite_code',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyInviteCodeRow),
   myMember: __table({
     name: 'my_member',
     indexes: [
@@ -55,13 +175,61 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyMemberRow),
+  myObligations: __table({
+    name: 'my_obligations',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyObligationsRow),
+  myTxns: __table({
+    name: 'my_txns',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyTxnsRow),
+  myVitals: __table({
+    name: 'my_vitals',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyVitalsRow),
+  scenarioChanges: __table({
+    name: 'scenario_changes',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ScenarioChangesRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("add_account", AddAccountReducer),
+  __reducerSchema("add_change", AddChangeReducer),
+  __reducerSchema("add_goal", AddGoalReducer),
+  __reducerSchema("add_obligation", AddObligationReducer),
+  __reducerSchema("add_person", AddPersonReducer),
+  __reducerSchema("add_transaction", AddTransactionReducer),
   __reducerSchema("admin_seed_demo", AdminSeedDemoReducer),
+  __reducerSchema("create_grant", CreateGrantReducer),
+  __reducerSchema("create_household", CreateHouseholdReducer),
+  __reducerSchema("fork", ForkReducer),
   __reducerSchema("join_household", JoinHouseholdReducer),
+  __reducerSchema("propose", ProposeReducer),
+  __reducerSchema("remove_account", RemoveAccountReducer),
+  __reducerSchema("remove_change", RemoveChangeReducer),
+  __reducerSchema("remove_goal", RemoveGoalReducer),
+  __reducerSchema("remove_obligation", RemoveObligationReducer),
+  __reducerSchema("renew_grant", RenewGrantReducer),
+  __reducerSchema("revoke_grant", RevokeGrantReducer),
+  __reducerSchema("set_ai_enabled", SetAiEnabledReducer),
+  __reducerSchema("set_monthly_spending", SetMonthlySpendingReducer),
   __reducerSchema("set_pin", SetPinReducer),
+  __reducerSchema("update_account", UpdateAccountReducer),
+  __reducerSchema("vote", VoteReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

@@ -6,11 +6,51 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AddAccountReducer from "../add_account_reducer";
+import AddChangeReducer from "../add_change_reducer";
+import AddGoalReducer from "../add_goal_reducer";
+import AddObligationReducer from "../add_obligation_reducer";
+import AddPersonReducer from "../add_person_reducer";
+import AddTransactionReducer from "../add_transaction_reducer";
 import AdminSeedDemoReducer from "../admin_seed_demo_reducer";
+import CreateGrantReducer from "../create_grant_reducer";
+import CreateHouseholdReducer from "../create_household_reducer";
+import ForkReducer from "../fork_reducer";
 import JoinHouseholdReducer from "../join_household_reducer";
+import ProposeReducer from "../propose_reducer";
+import RemoveAccountReducer from "../remove_account_reducer";
+import RemoveChangeReducer from "../remove_change_reducer";
+import RemoveGoalReducer from "../remove_goal_reducer";
+import RemoveObligationReducer from "../remove_obligation_reducer";
+import RenewGrantReducer from "../renew_grant_reducer";
+import RevokeGrantReducer from "../revoke_grant_reducer";
+import SetAiEnabledReducer from "../set_ai_enabled_reducer";
+import SetMonthlySpendingReducer from "../set_monthly_spending_reducer";
 import SetPinReducer from "../set_pin_reducer";
+import UpdateAccountReducer from "../update_account_reducer";
+import VoteReducer from "../vote_reducer";
 
+export type AddAccountParams = __Infer<typeof AddAccountReducer>;
+export type AddChangeParams = __Infer<typeof AddChangeReducer>;
+export type AddGoalParams = __Infer<typeof AddGoalReducer>;
+export type AddObligationParams = __Infer<typeof AddObligationReducer>;
+export type AddPersonParams = __Infer<typeof AddPersonReducer>;
+export type AddTransactionParams = __Infer<typeof AddTransactionReducer>;
 export type AdminSeedDemoParams = __Infer<typeof AdminSeedDemoReducer>;
+export type CreateGrantParams = __Infer<typeof CreateGrantReducer>;
+export type CreateHouseholdParams = __Infer<typeof CreateHouseholdReducer>;
+export type ForkParams = __Infer<typeof ForkReducer>;
 export type JoinHouseholdParams = __Infer<typeof JoinHouseholdReducer>;
+export type ProposeParams = __Infer<typeof ProposeReducer>;
+export type RemoveAccountParams = __Infer<typeof RemoveAccountReducer>;
+export type RemoveChangeParams = __Infer<typeof RemoveChangeReducer>;
+export type RemoveGoalParams = __Infer<typeof RemoveGoalReducer>;
+export type RemoveObligationParams = __Infer<typeof RemoveObligationReducer>;
+export type RenewGrantParams = __Infer<typeof RenewGrantReducer>;
+export type RevokeGrantParams = __Infer<typeof RevokeGrantReducer>;
+export type SetAiEnabledParams = __Infer<typeof SetAiEnabledReducer>;
+export type SetMonthlySpendingParams = __Infer<typeof SetMonthlySpendingReducer>;
 export type SetPinParams = __Infer<typeof SetPinReducer>;
+export type UpdateAccountParams = __Infer<typeof UpdateAccountReducer>;
+export type VoteParams = __Infer<typeof VoteReducer>;
 

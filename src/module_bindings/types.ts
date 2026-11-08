@@ -26,6 +26,19 @@ export const Account = __t.object("Account", {
 });
 export type Account = __Infer<typeof Account>;
 
+export const AccountView = __t.object("AccountView", {
+  id: __t.u64(),
+  nickname: __t.string(),
+  kind: __t.string(),
+  isJoint: __t.bool(),
+  ownerPersonId: __t.u64(),
+  visibility: __t.string(),
+  balanceCents: __t.i64(),
+  limitCents: __t.i64(),
+  aprBps: __t.i32(),
+});
+export type AccountView = __Infer<typeof AccountView>;
+
 export const AgentLog = __t.object("AgentLog", {
   id: __t.u64(),
   householdId: __t.u64(),
@@ -125,6 +138,16 @@ export const Commitment = __t.object("Commitment", {
 });
 export type Commitment = __Infer<typeof Commitment>;
 
+export const ConsentEntry = __t.object("ConsentEntry", {
+  id: __t.u64(),
+  actorPersonId: __t.u64(),
+  accountId: __t.u64(),
+  action: __t.string(),
+  detail: __t.string(),
+  at: __t.timestamp(),
+});
+export type ConsentEntry = __Infer<typeof ConsentEntry>;
+
 export const ConsentLog = __t.object("ConsentLog", {
   id: __t.u64(),
   householdId: __t.u64(),
@@ -200,6 +223,18 @@ export const GrantExpiry = __t.object("GrantExpiry", {
 });
 export type GrantExpiry = __Infer<typeof GrantExpiry>;
 
+export const GrantView = __t.object("GrantView", {
+  id: __t.u64(),
+  accountId: __t.u64(),
+  grantorPersonId: __t.u64(),
+  granteePersonId: __t.u64(),
+  level: __t.string(),
+  historyWindowDays: __t.i32(),
+  expiresAt: __t.timestamp(),
+  status: __t.string(),
+});
+export type GrantView = __Infer<typeof GrantView>;
+
 export const Household = __t.object("Household", {
   id: __t.u64(),
   name: __t.string(),
@@ -212,8 +247,52 @@ export const Household = __t.object("Household", {
   aiEnabled: __t.bool(),
   seed: __t.u64(),
   createdAt: __t.timestamp(),
+  isBot: __t.bool(),
 });
 export type Household = __Infer<typeof Household>;
+
+export const HouseholdApprovals = __t.object("HouseholdApprovals", {});
+export type HouseholdApprovals = __Infer<typeof HouseholdApprovals>;
+
+export const HouseholdCommitments = __t.object("HouseholdCommitments", {});
+export type HouseholdCommitments = __Infer<typeof HouseholdCommitments>;
+
+export const HouseholdConsentLog = __t.object("HouseholdConsentLog", {});
+export type HouseholdConsentLog = __Infer<typeof HouseholdConsentLog>;
+
+export const HouseholdPeople = __t.object("HouseholdPeople", {});
+export type HouseholdPeople = __Infer<typeof HouseholdPeople>;
+
+export const HouseholdPerson = __t.object("HouseholdPerson", {
+  id: __t.u64(),
+  displayName: __t.string(),
+  role: __t.string(),
+  personaKey: __t.string(),
+  online: __t.bool(),
+});
+export type HouseholdPerson = __Infer<typeof HouseholdPerson>;
+
+export const HouseholdPresence = __t.object("HouseholdPresence", {});
+export type HouseholdPresence = __Infer<typeof HouseholdPresence>;
+
+export const HouseholdScenarios = __t.object("HouseholdScenarios", {});
+export type HouseholdScenarios = __Infer<typeof HouseholdScenarios>;
+
+export const HouseholdSession = __t.object("HouseholdSession", {
+  id: __t.u64(),
+  name: __t.string(),
+  simDay: __t.i32(),
+  aiEnabled: __t.bool(),
+  clockRunning: __t.bool(),
+  cosignThresholdCents: __t.i64(),
+  baselineScenarioId: __t.u64(),
+});
+export type HouseholdSession = __Infer<typeof HouseholdSession>;
+
+export const InviteCode = __t.object("InviteCode", {
+  inviteCode: __t.string(),
+});
+export type InviteCode = __Infer<typeof InviteCode>;
 
 export const Member = __t.object("Member", {
   identity: __t.identity(),
@@ -238,8 +317,35 @@ export const MemberSession = __t.object("MemberSession", {
 });
 export type MemberSession = __Infer<typeof MemberSession>;
 
+export const MyAccounts = __t.object("MyAccounts", {});
+export type MyAccounts = __Infer<typeof MyAccounts>;
+
+export const MyAlerts = __t.object("MyAlerts", {});
+export type MyAlerts = __Infer<typeof MyAlerts>;
+
+export const MyForecast = __t.object("MyForecast", {});
+export type MyForecast = __Infer<typeof MyForecast>;
+
+export const MyGrants = __t.object("MyGrants", {});
+export type MyGrants = __Infer<typeof MyGrants>;
+
+export const MyHousehold = __t.object("MyHousehold", {});
+export type MyHousehold = __Infer<typeof MyHousehold>;
+
+export const MyInviteCode = __t.object("MyInviteCode", {});
+export type MyInviteCode = __Infer<typeof MyInviteCode>;
+
 export const MyMember = __t.object("MyMember", {});
 export type MyMember = __Infer<typeof MyMember>;
+
+export const MyObligations = __t.object("MyObligations", {});
+export type MyObligations = __Infer<typeof MyObligations>;
+
+export const MyTxns = __t.object("MyTxns", {});
+export type MyTxns = __Infer<typeof MyTxns>;
+
+export const MyVitals = __t.object("MyVitals", {});
+export type MyVitals = __Infer<typeof MyVitals>;
 
 export const NessieJob = __t.object("NessieJob", {
   scheduledId: __t.u64(),
@@ -281,6 +387,19 @@ export const Obligation = __t.object("Obligation", {
   nessieId: __t.string(),
 });
 export type Obligation = __Infer<typeof Obligation>;
+
+export const ObligationView = __t.object("ObligationView", {
+  id: __t.u64(),
+  accountId: __t.u64(),
+  kind: __t.string(),
+  label: __t.string(),
+  amountCents: __t.i64(),
+  cadence: __t.string(),
+  anchorDay: __t.i32(),
+  flexible: __t.bool(),
+  active: __t.bool(),
+});
+export type ObligationView = __Infer<typeof ObligationView>;
 
 export const Person = __t.object("Person", {
   id: __t.u64(),
@@ -327,6 +446,9 @@ export const ScenarioChange = __t.object("ScenarioChange", {
 });
 export type ScenarioChange = __Infer<typeof ScenarioChange>;
 
+export const ScenarioChanges = __t.object("ScenarioChanges", {});
+export type ScenarioChanges = __Infer<typeof ScenarioChanges>;
+
 export const SpendProfile = __t.object("SpendProfile", {
   id: __t.u64(),
   householdId: __t.u64(),
@@ -351,6 +473,17 @@ export const Txn = __t.object("Txn", {
   nessieId: __t.string(),
 });
 export type Txn = __Infer<typeof Txn>;
+
+export const TxnView = __t.object("TxnView", {
+  id: __t.u64(),
+  accountId: __t.u64(),
+  day: __t.i32(),
+  amountCents: __t.i64(),
+  category: __t.string(),
+  merchantCode: __t.string(),
+  rawDescription: __t.string(),
+});
+export type TxnView = __Infer<typeof TxnView>;
 
 export const Vital = __t.object("Vital", {
   id: __t.u64(),

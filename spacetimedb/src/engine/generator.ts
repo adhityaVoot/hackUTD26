@@ -163,7 +163,7 @@ export function patelConfig(): PersonaConfig {
       { id: 10, ownerPersonId: 0, isJoint: true, kind: 'mortgage', nickname: 'Home mortgage', balanceCents: 28_000_000, limitCents: 0, aprBps: 625, bufferCents: 0, maturityDay: -1, shareLevel: 'full' },
       { id: 11, ownerPersonId: 0, isJoint: true, kind: 'auto_loan', nickname: 'Toyota auto loan', balanceCents: 1_450_000, limitCents: 0, aprBps: 499, bufferCents: 0, maturityDay: -1, shareLevel: 'full' },
       { id: 12, ownerPersonId: 0, isJoint: true, kind: 'credit_card', nickname: 'Joint card', balanceCents: 120_000, limitCents: 800_000, aprBps: 1999, bufferCents: 0, maturityDay: -1, shareLevel: 'full' },
-      { id: 13, ownerPersonId: 3, isJoint: false, kind: 'checking', nickname: 'Student checking', balanceCents: 120_000, limitCents: 0, aprBps: 0, bufferCents: 10_000, maturityDay: -1, shareLevel: 'none' },
+      { id: 13, ownerPersonId: 3, isJoint: false, kind: 'checking', nickname: 'Student checking', balanceCents: 120_000, limitCents: 0, aprBps: 0, bufferCents: 25_000, maturityDay: -1, shareLevel: 'none' },
     ],
     obligations: [
       { id: 1, accountId: 1, kind: 'income', label: 'Priya salary', amountCents: 280_000, cadence: 'semimonthly', anchorDay: 13, flexible: false },

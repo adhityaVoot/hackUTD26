@@ -1,0 +1,37 @@
+:root {
+  --bg: #f3efe7;
+  --surface: #fffdf9;
+  --ink: #1c1916;
+  --muted: #5f584e;
+  --line: #e3dbd0;
+  --accent: #0f6e6a;
+  --accent-ink: #ffffff;
+  --band-green: #1b7a43;
+  --band-green-bg: #e5f5ea;
+  --band-yellow: #9a6700;
+  --band-yellow-bg: #fff4d6;
+  --band-red: #b42318;
+  --band-red-bg: #fde8e6;
+  --online: #1b7a43;
+  --offline: #b7b0a6;
+  --font: "Avenir Next", "Segoe UI", sans-serif;
+  --text: 1.125rem;
+  --title: 1.85rem;
+  --shadow: 0 10px 30px rgba(28, 25, 22, 0.08);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { margin: 0; min-height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--text);
+  line-height: 1.45;
+}
+
+button, input { font: inherit; }
+button { cursor: pointer; }
+a { color: inherit; }

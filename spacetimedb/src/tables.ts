@@ -13,6 +13,7 @@ export const household = table({ name: 'household' }, {
   aiEnabled: t.bool(),                    // KILL SWITCH
   seed: t.u64(),                          // generator + forecast seed
   createdAt: t.timestamp(),
+  isBot: t.bool().default(false),
 });
 
 export const person = table({ name: 'person' }, {      // a human in the household (seeded); devices claim persons

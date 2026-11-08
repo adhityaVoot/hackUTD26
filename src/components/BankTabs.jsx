@@ -1,0 +1,4 @@
+import React from 'react';
+import * as Tabs from '@radix-ui/react-tabs';
+import {motion,useReducedMotion} from 'motion/react';
+export function BankTabs({items,label,className=''}){const reduced=useReducedMotion();return <Tabs.Root defaultValue={items[0].id} className={'bank-tabs-root '+className}><Tabs.List className="bank-ui-tablist" aria-label={label}>{items.map(({id,label:caption,description,Icon})=><Tabs.Trigger key={id} value={id} className="bank-ui-tab"><Icon size={17}/><span>{caption}{description&&<small>{description}</small>}</span></Tabs.Trigger>)}</Tabs.List>{items.map(({id,content})=><Tabs.Content key={id} value={id} className="bank-ui-tabcontent"><motion.div initial={reduced?false:{opacity:0,y:7}} animate={{opacity:1,y:0}} transition={{duration:.2}}>{content}</motion.div></Tabs.Content>)}</Tabs.Root>}

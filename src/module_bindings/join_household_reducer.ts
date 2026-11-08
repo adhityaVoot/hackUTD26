@@ -12,5 +12,5 @@ import {
 
 export default {
   inviteCode: __t.string(),
-  personaKey: __t.string(),
+  name: __t.string(),
 };

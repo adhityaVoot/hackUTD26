@@ -2,6 +2,7 @@ import { ScheduleAt, SenderError } from 'spacetimedb/server';
 import type { Ctx } from './auth';
 import { DEMO_PATELS, DEMO_SEED, generateHousehold } from './engine/generator';
 import type { Txn } from './engine/types';
+import { recomputeScenario } from './recompute';
 import { timestampAt } from './time';
 
 const NINETY_DAYS_MICROS = 90n * 24n * 60n * 60n * 1_000_000n;
@@ -20,20 +21,6 @@ function must(map: Map<number, bigint>, id: number, label: string): bigint {
   const found = map.get(id);
   if (found === undefined) throw new SenderError(`Seed is missing ${label} ${id}`);
   return found;
-}
-
-/**
- * Clears forecast and vital rows for a scenario.
- * engine/forecast.ts and engine/vitals.ts are not in this module yet, so this
- * does not write p10/p50/p90 or vital bands.
- */
-export function recomputeScenario(ctx: Ctx, scenarioId: bigint): void {
-  for (const row of list(ctx.db.forecastDay.scenarioId.filter(scenarioId))) {
-    ctx.db.forecastDay.id.delete(row.id);
-  }
-  for (const row of list(ctx.db.vital.scenarioId.filter(scenarioId))) {
-    ctx.db.vital.id.delete(row.id);
-  }
 }
 
 function wipeHousehold(ctx: Ctx, householdId: bigint): void {
@@ -142,6 +129,7 @@ export function seedDemo(ctx: Ctx, inviteCode: string): void {
     clockScheduleId: 0n,
     secondsPerDay: 0,
     aiEnabled: true,
+    isBot: false,
     seed: BigInt(DEMO_SEED),
     createdAt: ctx.timestamp,
   });
