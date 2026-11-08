@@ -110,6 +110,9 @@ class Checker {
     if (!nc.ok) this.errors.push(`${field} uses numbers no tool returned (${nc.unsupported.slice(0, 4).join(', ')}); use slots like {sim_1.lowest_cash_after} instead`);
     const filled = fillSlots(raw, this.state);
     if (filled.unknown.length) this.errors.push(`${field} has unknown slots ${filled.unknown.slice(0, 3).join(', ')}`);
+    // Internal field names ("household_cash_now") mean the model pasted a key instead of a value.
+    const fieldName = filled.text.replace(/\{[^}]*\}/g, '').match(/\b(?!(?:acct|obl|goal|sim|mem|opp)_)[a-z]+_[a-z_0-9]+\b/);
+    if (fieldName) this.errors.push(`${field} contains the field name "${fieldName[0]}"; write plain English or use a {slot}`);
     const stray = filled.text.match(/\{[^}]*\}?/);
     if (stray && !filled.unknown.length) this.errors.push(`${field} has an unsupported placeholder ${stray[0].slice(0, 40)}; use {sim_N.field}, {now.field} or {savings.field}`);
     // Truncate after filling, at a word boundary, so a slot is never cut in half.
@@ -221,7 +224,7 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
       }
       const weakest = c.text('weakest_point', parsed.weakest_point, true, 300);
       const mitigations = (Array.isArray(parsed.mitigations) ? parsed.mitigations : []).slice(0, 3).map((x: any, i: number) => ({
-        sim: c.sim(`mitigations[${i}].sim_id`, x?.sim_id, false),
+        sim: c.sim(`mitigations[${i}].sim_id`, x?.sim_id),
         title: typeof x?.title === 'string' ? x.title.slice(0, 60) : `Mitigation ${i + 1}`,
         why: c.text(`mitigations[${i}].why`, x?.why, false, 300),
       }));

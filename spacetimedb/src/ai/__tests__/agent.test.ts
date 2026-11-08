@@ -154,3 +154,20 @@ describe('slots', () => {
     expect(out.result.sections[0].items[0]).toMatch(/Cash dips to \$[\d,]+ on [A-Z][a-z]{2} \d+, 2026\./);
   });
 });
+
+describe('verification, round 2', () => {
+  it('rejects leftover placeholders, pasted field names, and mitigations without a fork', () => {
+    const http = fakeHttp([
+      () => ({ body: toolCall('simulate_scenario', { title: 'Job loss', levers: [{ kind: 'income_change', member: 'B', percent: -100, start_date: '2026-11-10', end_date: '2027-01-10', label: 'Job loss' }] }) }),
+      () => ({ body: final({ title: 'Job loss', answer: 'Set aside {required_monthly_savings.per_month}; cash falls from household_cash_now.', scenarios: [{ sim_id: 'sim_1', name: 'Job loss', severity: 'expected' }], weakest_point: 'Cash dips in January.', mitigations: [{ title: 'Pause Visa', why: 'Saves cash.' }] }) }),
+      () => ({ body: final({ title: 'Job loss', answer: 'Cash bottoms at {sim_1.lowest_cash_12_months_after}.', scenarios: [{ sim_id: 'sim_1', name: 'Job loss', severity: 'expected' }], weakest_point: 'Cash dips in January.', mitigations: [] }) }),
+    ]);
+    const out = runAgent(state('stress', 'job loss'), { http, primary: cfg, secondary: null });
+    const failed = out.steps.find(s => s.step === 'verify' && s.flagged)!.detail;
+    expect(failed).toMatch(/unsupported placeholder/);
+    expect(failed).toMatch(/field name "household_cash_now"/);
+    expect(failed).toMatch(/mitigations\[0\]\.sim_id/);
+    expect(out.status).toBe('done');
+    expect(out.result.answer).toMatch(/^Cash bottoms at \$[\d,]+\.$/);
+  });
+});

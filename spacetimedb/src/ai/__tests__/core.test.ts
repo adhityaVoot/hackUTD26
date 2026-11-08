@@ -189,3 +189,11 @@ describe('live-run fixes', () => {
     expect(() => resolveLever(snap.twin, { kind: 'one_time', amount: 5, date: '2026-06-01', label: 'x' })).toThrow(/Did you mean 2027-06-01/);
   });
 });
+
+describe('live-run fixes, round 2', () => {
+  it('repairs a lever list string that is missing its closing bracket', () => {
+    const s = newState('ripple', buildSnapshot(patelInput()), 'x');
+    const broken = '[{"kind": "one_time", "amount": 100, "date": "2026-12-01", "label": "x"}';
+    expect((executeTool(s, 'simulate_scenario', { title: 'a', levers: broken }) as any).sim_id).toBe('sim_1');
+  });
+});

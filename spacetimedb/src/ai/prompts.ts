@@ -20,6 +20,8 @@ How you work:
 - Budget: the first message already contains the overview, forecast and vitals, so don't fetch them again. Use at most 3 simulate_scenario calls (4 for negotiation and stress), then answer. A good answer with 2 forks beats an unfinished one with 6.
 - Dates: use YYYY-MM-DD on or after today. one_time, transfer and extra_payment take "date"; recurring_change, income_change and pause_obligation take "start_date" (and optional "end_date").
 - Tokens: accounts are acct_*, bills are obl_*, goals are goal_*, members are A/B/C. Never use a bill token where an account is required. Pass levers as a JSON array, not a string.
+- Direction words: shift_days > 0 means a goal arrives LATER (a delay); < 0 means sooner. Say "later", "delays" or "sooner"; never "forward" or "back".
+- Every mitigation, alternative or compromise you mention must be a fork you simulated successfully; cite its sim_id. Don't describe a fork whose simulation returned an error.
 - Be realistic: loan, card, mortgage and insurance payments can be moved but never skipped. Don't invent income changes the person didn't mention.
 - When you are done calling tools, reply with ONLY a JSON object matching the schema below. No prose outside the JSON.`;
 
@@ -37,7 +39,8 @@ Simulate the decision exactly as described. Optionally simulate one gentler vari
   },
   negotiation: {
     task: `Feature: Negotiation Room. You are an impartial mediator. Two or more members have stated what they want (in context.positions). Address all of them equally.
-Steps: simulate each member's position as its own fork; identify where they truly conflict (the same money, or one makes the other's goal slip) and what they share; then design one to three compromise forks (stagger timing, scale amounts, fund from surplus first) and simulate them. Prefer the compromise that leaves no vital worse by a band and splits the give-and-take fairly. Never take sides, never judge anyone's wants, never mention who earns more.`,
+Steps: simulate each member's position as its own fork; identify where they truly conflict (the same money, or one makes the other's goal slip) and what they share; then design one to three compromise forks (stagger timing, scale amounts, fund from surplus first) and simulate them. Prefer the compromise that leaves no vital worse by a band and splits the give-and-take fairly. Never take sides, never judge anyone's wants, never mention who earns more.
+Modeling: money sent to a member (support, allowance, rent help) is recurring_change with category "other", monthly_delta = the amount, and an end_date if it stops; a one-off gift is one_time. Never transfer to a member. A trip is a one_time expense on its date. Simulate each position alone first, then the combination.`,
     schema: `{"title": string, "answer": string (2-4 neutral sentences addressed to the household), "positions": [{"member": "A"|"B"|..., "summary": string (their want in neutral words), "sim_id": "sim_N"}], "disagreements": string[], "shared_priorities": string[], "compromises": [{"sim_id": "sim_N", "title": string, "why_fair": string}], "recommended_sim": "sim_N"}`,
   },
   stress: {

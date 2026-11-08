@@ -296,9 +296,10 @@ export function getOpportunities(state: AgentState): Opportunity[] {
 function leversArg(args: Record<string, unknown>): Lever[] {
   let v = args.levers ?? args.leavers ?? args.changes ?? args.lever;
   if (typeof v === 'string') {
-    const s = v.trim();
+    // Re-wrap so a missing or extra bracket ("[{...}" or "{...},{...}") still parses.
+    const inner = v.trim().replace(/^\[/, '').replace(/\]$/, '');
     try {
-      v = JSON.parse(s.startsWith('[') ? s : `[${s}]`);
+      v = JSON.parse(`[${inner}]`);
     } catch {
       return [];
     }
