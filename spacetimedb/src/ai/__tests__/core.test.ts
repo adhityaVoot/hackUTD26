@@ -138,6 +138,22 @@ describe('twin projection', () => {
     expect(diff(base, after).minBalance12mAfter).toBeLessThan(base.minBalance12m);
   });
 
+  it('flags a checking account that runs short even when pooled household cash is fine, and a savings top-up clears it', () => {
+    const joint = snap.twin.accounts.find(a => a.kind === 'checking' && a.owner === 'joint')!;
+    const savings = snap.twin.accounts.find(a => a.kind === 'savings' && a.owner === 'joint')!;
+    const due = snap.twin.today + 10;
+    const twin = {
+      ...snap.twin,
+      accounts: snap.twin.accounts.map(a => (a.token === joint.token ? { ...a, balance: 2500 } : a)),
+      obligations: [...snap.twin.obligations, { token: 'obl_big', kind: 'mortgage', label: 'Big bill', amount: 2000, cadence: 'once', anchorDay: due, accountToken: joint.token, owner: 'joint', flexible: false, visible: true }],
+    };
+    const short = simulate(twin);
+    expect(short.crunchAccount).toBe(joint.token);
+    expect(short.peakCrunchRisk).toBeGreaterThan(0.25);
+    const topUp = resolveLever(twin, { kind: 'transfer', from: savings.token, to: joint.token, amount: 4000, date: dayToIso(due - 2) });
+    expect(simulate(twin, [topUp]).peakCrunchRisk).toBeLessThan(short.peakCrunchRisk);
+  });
+
   it('rejects levers on accounts the requester cannot see, with a fixable reason', () => {
     const sig = snap.twin.accounts.find(a => a.visibility === 'signal')!;
     const joint = snap.twin.accounts.find(a => a.kind === 'checking' && a.owner === 'joint')!;

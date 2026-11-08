@@ -157,6 +157,7 @@ export function recomputeScenario(ctx: Ctx, scenarioId: bigint): void {
     essentialMonthly: accounts.length === 0 ? 0 : essential,
     liquidNow,
     goals: input.goals,
+    accountNames: new Map(accounts.map(row => [n(row.id), row.nickname])),
   });
   for (const vital of vitals) {
     ctx.db.vital.insert({

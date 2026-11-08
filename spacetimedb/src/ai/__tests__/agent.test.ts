@@ -274,15 +274,19 @@ describe('live-run fixes, round 4', () => {
 describe('live-run fixes, round 5', () => {
   it('sentinel: the engine picks the best simulated fix when the model forgets to name one', () => {
     const input = patelInput(0n);
-    input.accounts = input.accounts.map(a => (a.id === 10n ? { ...a, balanceCents: 90_000n } : a.id === 11n ? { ...a, balanceCents: 20_000n } : a.id === 13n ? { ...a, balanceCents: 10_000n } : a));
-    const s = newState('briefing', buildSnapshot(input), 'risk', [], { mode: 'sentinel' });
+    input.accounts = input.accounts.map(a => (a.id === 10n ? { ...a, balanceCents: 90_000n } : a.id === 11n ? { ...a, balanceCents: 600_000n } : a.id === 13n ? { ...a, balanceCents: 10_000n } : a));
+    const snap = buildSnapshot(input);
+    const tok = (id: bigint) => [...snap.map.accounts].find(([, v]) => v === id)![0];
+    const s = newState('briefing', snap, 'risk', [], { mode: 'sentinel' });
     const http = fakeHttp([
       () => ({ body: toolCall('simulate_scenario', { title: 'Trim dining', levers: [{ kind: 'recurring_change', category: 'dining', monthly_delta: -300, start_date: '2026-11-08', end_date: '2026-12-08', label: 'Trim dining' }] }) }),
+      () => ({ body: toolCall('simulate_scenario', { title: 'Top up joint checking', levers: [{ kind: 'transfer', from: tok(11n), to: tok(10n), amount: 4000, date: '2026-11-08', label: 'Top up' }] }) }),
       () => ({ body: final({ title: 'Crunch ahead', answer: 'Risk is high early this month.', upcoming: [], watch_out: [] }) }),
     ]);
     const out = runAgent(s, { http, primary: cfg, secondary: null });
     expect(out.status).toBe('done');
-    expect(out.result.scenarios[0].title).toBe('Trim dining');
+    // The model simulated two fixes but named neither; the engine keeps the one that lowers risk most.
+    expect(out.result.scenarios[0].title).toBe('Top up joint checking');
   });
 
   it('gives tools back when verification asks for a simulation after a forced final answer', () => {
