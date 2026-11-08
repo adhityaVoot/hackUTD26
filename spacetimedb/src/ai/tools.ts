@@ -45,6 +45,8 @@ export interface AgentState {
   lastSavings: Record<string, unknown> | null; // last required_monthly_savings result, for {savings.*} slots
   bank: BankLookup | null;
   http: HttpLike | null; // public lookup; household records are never sent through it
+  lastBudget: Record<string, unknown> | null; // last spending_budget result, for {budget.*} slots
+  sources: Map<string, string>; // url -> title for every page lookup_information returned
 }
 
 export function newState(
@@ -73,6 +75,8 @@ export function newState(
     lastSavings: null,
     bank: null,
     http: null,
+    lastBudget: null,
+    sources: new Map(),
   };
 }
 
@@ -152,6 +156,15 @@ const ALL_TOOLS: Record<string, ToolSpec> = {
       },
     },
   },
+  spending_budget: {
+    type: 'function',
+    function: {
+      name: 'spending_budget',
+      description:
+        "How much the household can put toward a one-time purchase right now, from the deterministic forecast. comfortable_budget keeps three months of essential bills above the safety buffer for the next 12 months; stretch_budget only stays above the buffer. Use it to judge a price you found and to suggest a price range that fits.",
+      parameters: { type: 'object', properties: {} },
+    },
+  },
   required_monthly_savings: {
     type: 'function',
     function: {
@@ -202,8 +215,8 @@ const ALL_TOOLS: Record<string, ToolSpec> = {
 };
 
 const FEATURE_TOOLS: Record<FeatureKind, string[]> = {
-  twin: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'lookup_information', 'simulate_scenario', 'required_monthly_savings', 'check_bank'],
-  ripple: ['get_household_overview', 'get_forecast_summary', 'lookup_information', 'simulate_scenario'],
+  twin: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'lookup_information', 'spending_budget', 'simulate_scenario', 'required_monthly_savings', 'check_bank'],
+  ripple: ['get_household_overview', 'get_forecast_summary', 'lookup_information', 'spending_budget', 'simulate_scenario'],
   negotiation: ['get_household_overview', 'get_vitals', 'lookup_information', 'simulate_scenario', 'search_memory'],
   stress: ['get_household_overview', 'get_forecast_summary', 'lookup_information', 'simulate_scenario'],
   life_event: ['get_household_overview', 'get_forecast_summary', 'lookup_information', 'simulate_scenario', 'required_monthly_savings'],
@@ -349,6 +362,27 @@ export function getOpportunities(state: AgentState): Opportunity[] {
   return state.opportunities;
 }
 
+/**
+ * One-time spending room from the forecast. A purchase made now lowers every later balance by its
+ * cost, so the room is the lowest projected cash over 12 months minus what must stay untouched.
+ */
+export function spendingBudget(state: AgentState) {
+  const b = state.baseline;
+  const floor100 = (n: number) => Math.max(0, Math.floor(n / 100) * 100);
+  const keep = b.buffer + 3 * b.essentialMonthly;
+  const result = {
+    cash_now: Math.round(b.startLiquid),
+    lowest_cash_next_12_months: Math.round(b.minBalance12m),
+    safety_buffer: Math.round(b.buffer),
+    essential_bills_per_month: Math.round(b.essentialMonthly),
+    comfortable_budget: floor100(b.minBalance12m - keep),
+    stretch_budget: floor100(b.minBalance12m - b.buffer),
+    how: 'comfortable = lowest cash over 12 months - safety buffer - 3 months of essential bills; stretch = lowest cash - safety buffer',
+  };
+  state.lastBudget = result;
+  return { ...result, slot_hint: 'cite as {budget.comfortable_budget} or {budget.stretch_budget}' };
+}
+
 /** Live cross-check against the bank. Only tokens and amounts come back; payee text is dropped. */
 export function checkBank(state: AgentState) {
   if (!state.bank) return { available: false, note: 'Bank sync is not configured; the forecast uses the last synced ledger.' };
@@ -453,8 +487,12 @@ export function executeTool(state: AgentState, name: string, rawArgs: string | R
     case 'lookup_information': {
       if (!state.http) return { available: false, note: 'Public lookup is not available in this run.' };
       const query = String(args.query ?? state.question);
-      return remember(state, lookupInformation(state.http, query));
+      const found = lookupInformation(state.http, query);
+      for (const p of found.passages) state.sources.set(p.url, p.title);
+      return remember(state, found);
     }
+    case 'spending_budget':
+      return remember(state, spendingBudget(state));
     case 'check_bank':
       return remember(state, checkBank(state));
     default:

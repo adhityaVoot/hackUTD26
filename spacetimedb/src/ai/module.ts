@@ -550,7 +550,9 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
         request = route.request;
         routeSteps = route.steps;
       }
-      const state = newState(feature, snap, request, loaded.memoryRows, loaded.context);
+      // Coach turns carry the conversation so far, so replies can build on earlier answers.
+      const runContext = loaded.kind === 'coach' && loaded.history.length ? { ...loaded.context, conversation: loaded.history } : loaded.context;
+      const state = newState(feature, snap, request, loaded.memoryRows, runContext);
       if (loaded.bank) state.bank = nessieBank(http, loaded.bank, snap, loaded.snapInput.accounts);
       state.steps.push(...routeSteps);
       const outcome = runAgent(state, deps);

@@ -386,3 +386,55 @@ describe('big purchases (Ferrari report)', () => {
     expect(sanitizeUserText('Pay from account 12345678 a $10000000 car', new Map())).toBe('Pay from account [number] a $10000000 car');
   });
 });
+
+describe('conversational coach with online prices (Rolex)', () => {
+  const ddg = (snippets: string[]) =>
+    `<html>${snippets.map((t, i) => `<tr><td><a rel="nofollow" href="//duckduckgo.com/l/?uddg=${encodeURIComponent(`https://shop${i}.example.com/rolex`)}&amp;rut=x" class='result-link'>Rolex prices ${i}</a></td></tr><tr><td class='result-snippet'>${t}</td></tr>`).join('')}</html>`;
+  const web = (url: string) => {
+    if (url.includes('lite.duckduckgo.com')) return { status: 200, text: () => (url.includes('under') ? ddg(['Pre-owned Rolex Oyster Perpetual from $6,643 and Datejust models around $9,500.']) : ddg(['Rolex watches cost around $14,000 on average, from $6,643 to $35,000 for popular steel models.'])) };
+    return { status: 200, text: () => '{}' }; // wikipedia: nothing useful
+  };
+
+  it('spending_budget is lowest 12-month cash minus buffer minus three months of essentials', () => {
+    const s = state('twin', 'x');
+    const b = executeTool(s, 'spending_budget', {}) as any;
+    expect(b.comfortable_budget).toBe(Math.max(0, Math.floor((s.baseline.minBalance12m - s.baseline.buffer - 3 * s.baseline.essentialMonthly) / 100) * 100));
+    expect(b.stretch_budget).toBeGreaterThanOrEqual(b.comfortable_budget);
+  });
+
+  it('looks up prices, checks the budget, suggests a cheaper fit, cites sources and asks a follow-up', () => {
+    const s = state('twin', 'I wanna buy a rolex');
+    const lev = (amount: number, label: string) => ({ kind: 'one_time', amount, date: '2026-11-20', label });
+    const model = fakeHttp([
+      () => ({ body: toolCall('lookup_information', { query: 'Rolex watch price' }) }),
+      () => ({ body: toolCall('spending_budget', {}) }),
+      () => ({ body: toolCall('simulate_scenario', { title: 'Rolex at typical price', levers: [lev(14000, 'Rolex')] }) }),
+      () => ({ body: toolCall('lookup_information', { query: 'Rolex under $10,000' }) }),
+      () => ({ body: toolCall('simulate_scenario', { title: 'Pre-owned Datejust', levers: [lev(9500, 'Pre-owned Rolex')] }) }),
+      () => ({
+        body: final({
+          title: 'A Rolex that fits', verdict: 'yes_with_tradeoffs',
+          answer: 'Rolex prices I found average about $14,000. You can comfortably spend about {budget.comfortable_budget} right now, so a pre-owned Datejust around $9,500 fits better.',
+          follow_up: 'Want me to look at pre-owned models around that price?',
+          recommended_sim: 'sim_1', alternative_sims: ['sim_2'],
+          sources: [{ title: 'x', url: 'https://shop0.example.com/rolex' }, { title: 'made up', url: 'https://not-returned.example.com' }],
+        }),
+      }),
+    ]);
+    // One client for everything, as in production: search URLs go to the fake web, the rest to the fake model.
+    const http = { fetch: (url: string, init: any) => (/duckduckgo|wikipedia/.test(url) ? web(url) : model.fetch(url, init)) };
+    const out = runAgent(s, { http, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(out.result.answer).toMatch(/comfortably spend about \$[\d,]+ right now/);
+    expect(out.result.followUp).toBe('Want me to look at pre-owned models around that price?');
+    expect(out.result.sources).toEqual([{ title: 'Rolex prices 0', url: 'https://shop0.example.com/rolex' }]); // only pages lookup returned
+    expect(out.result.scenarios.map(x => x.levers[0].amount)).toEqual([14000, 9500]);
+  });
+
+  it('asks for the price instead of guessing when nothing online states one', () => {
+    const model = fakeHttp([() => ({ body: final({ title: 'Which one?', verdict: 'not_yet', answer: "I couldn't find a price for that.", follow_up: 'What price range do you have in mind?' }) })]);
+    const out = runAgent(state('twin', 'I want a custom yacht'), { http: model, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(out.result.followUp).toBe('What price range do you have in mind?');
+  });
+});

@@ -25,14 +25,21 @@ How you work:
 - Totals: if you mention a total, use a slot such as {sim_1.one_time_costs_total}; don't add numbers up yourself.
 - Every mitigation, alternative or compromise you mention must be a fork you simulated successfully; cite its sim_id. Don't describe a fork whose simulation returned an error.
 - Be realistic: loan, card, mortgage and insurance payments can be moved but never skipped. Don't invent income changes the person didn't mention.
+- If context.conversation is present, you are mid-conversation: it lists the earlier turns. Continue naturally, refer back to what was already said, and don't repeat yourself.
 - When you are done calling tools, reply with ONLY a JSON object matching the schema below. No prose outside the JSON.`;
 
 const FEATURES: Record<FeatureKind, { task: string; schema: string }> = {
   twin: {
     task: `Feature: Financial Digital Twin. Member A asked a question about the household's finances (often "can we afford X?").
-Steps: look at the overview and forecast. If the member did not state a dollar amount, call lookup_information with the product or topic and use a price a passage actually states. If lookup has no usable price, set verdict to "not_yet" and ask what amount to use. Do not assume a round number. Then simulate, and if the answer is "not yet" or has real costs, simulate one or two alternatives (later date, smaller amount, saving monthly first) so the household has a path forward.
+You are a friendly coach in a conversation, not a report generator. Steps:
+1. If the member named something to buy without a price ("I wanna buy a Rolex"), call lookup_information (e.g. "Rolex watch price") and read price_points: note the typical price and the range.
+2. Call spending_budget to see what the household can comfortably spend right now.
+3. Simulate the typical price. If it is above comfortable_budget, look up options near the comfortable budget (e.g. "Rolex under $10,000" or "pre-owned Rolex price") and simulate one that fits, so you can suggest a concrete, cheaper path. If it fits, say so plainly.
+4. If no usable price comes back, set verdict "not_yet", don't guess, and ask what they have in mind in follow_up.
+Voice: talk to the member as "you", like a friend who knows money, in 2-4 short sentences. Lead with what you found online ("Rolex prices I found average about $14,000, with models from around $6,600"), then say plainly how much they can comfortably spend right now using {budget.comfortable_budget}, then your suggestion with one concrete price. Mention at most one goal effect. Don't list every simulation; the cards show the details.
+If context.conversation shows you already answered the basics, don't repeat them: move the conversation forward (e.g. look up specific models in the price range they chose and name one or two with their prices from the lookup). Never invent a price; every price comes from price_points or a passage. End with a natural follow-up question in follow_up (e.g. "Want me to look at pre-owned Datejusts around that price?"). If they ask for sources or links, list the pages you used in sources.
 Verdict meanings: "yes" (no vital gets worse by a band, no buffer breach), "yes_with_tradeoffs" (affordable but something meaningful slips), "not_yet" (works with a change of timing or amount: show that alternative), "no" (breaks the buffer or a key goal in every version you tried).`,
-    schema: `{"title": string (max 60 chars), "verdict": "yes"|"yes_with_tradeoffs"|"not_yet"|"no", "answer": string (2-4 sentences, direct answer first, numbers from tools only), "tradeoffs": string[] (1-4 short bullets), "recommended_sim": "sim_N" (the fork that matches the question), "alternative_sims": ["sim_N", ...] (optional, better paths)}`,
+    schema: `{"title": string (max 60 chars), "verdict": "yes"|"yes_with_tradeoffs"|"not_yet"|"no", "answer": string (2-4 conversational sentences to the member; numbers from tools or slots only), "follow_up": string (one question back to the member), "tradeoffs": string[] (0-3 short bullets), "recommended_sim": "sim_N" (the fork for what they asked about; omit only when asking them for a price), "alternative_sims": ["sim_N", ...] (optional, e.g. the cheaper option), "sources": [{"title": string, "url": string}] (pages from lookup_information whose prices you used)}`,
   },
   ripple: {
     task: `Feature: Ripple Effect. Member A describes one decision. Show its chain of consequences in order: what happens first, what that causes next, and so on (cash on the day, then the next bills, the cushion and overdraft risk, then goals and long-run vitals).
@@ -99,6 +106,8 @@ Workflows:
 - opportunity: where can we save / what should we look at
 - health: how are we doing / explain our score or vitals
 - briefing: what's coming up / outlook for the next weeks / bills due
+When the latest message points back ("that budget", "that one", "something cheaper", "yes, show me"), resolve it from the coach's most recent answer and follow-up question, not from the member's first message. Example: if the coach last suggested "a pre-owned Datejust around $8,000-$10,000" and the member says "yeah show me something around that budget", the request is "Find a Rolex around $8,000-$10,000 and check how it fits the household".
+If the member asks for links, sources or where to buy, keep the workflow of the current topic and add "include sources" to the request.
 Reply with ONLY {"workflow": "<one of the names>", "request": "<the message rewritten as a standalone request, including details from earlier turns>"}.`;
 
 export const DISCLAIMER = 'Projections from your household data. Not financial advice. Nothing moves until co-signed.';

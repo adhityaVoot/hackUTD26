@@ -239,6 +239,8 @@ export interface InsightResult {
   sections: { heading: string; items: string[] }[];
   scenarios: ScenarioDraft[]; // forks the agent built; the first one becomes a draft scenario row
   extra?: Record<string, unknown>; // feature-specific structured payload (chain, assumptions, opportunities...)
+  followUp?: string; // the coach's question back to the member, for a conversational reply
+  sources?: { title: string; url: string }[]; // web pages a cited price came from
   source: 'nemotron' | 'fallback';
   model?: string;
   disclaimer: string;

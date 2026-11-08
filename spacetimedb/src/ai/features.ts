@@ -53,12 +53,12 @@ function base(state: AgentState, title: string, answer: string, source: InsightR
 // The model writes {sim_1.lowest_cash_after}, {sim_1.goal_2.shift_days} or
 // {now.peak_overdraft_risk_pct_next_30_days}; the engine fills them with exact values.
 
-const SLOT = /\{(sim_\d+|now|savings)\.([a-z0-9_]+)(?:\.([a-z0-9_]+))?\}/g;
+const SLOT = /\{(sim_\d+|now|savings|budget)\.([a-z0-9_]+)(?:\.([a-z0-9_]+))?\}/g;
 
 function formatSlot(key: string, v: unknown): string {
   if (typeof v !== 'number') return String(v);
   if (/_pct/.test(key)) return `${v}%`;
-  if (/cash|surplus|income|outflow|buffer|balance/.test(key)) return $(v);
+  if (/cash|surplus|income|outflow|buffer|balance|budget|price|cost|amount|bills|total|per_month|target/.test(key)) return $(v);
   return v.toLocaleString('en-US');
 }
 
@@ -69,6 +69,7 @@ export function fillSlots(text: string, state: AgentState): { text: string; unkn
     let obj: Record<string, unknown> | undefined;
     if (src === 'now') obj = now;
     else if (src === 'savings') obj = state.lastSavings ?? undefined;
+    else if (src === 'budget') obj = state.lastBudget ?? undefined;
     else {
       const sim = state.sims.get(src);
       obj = sim ? (diffView(sim) as Record<string, unknown>) : undefined;
@@ -158,7 +159,10 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
   switch (state.feature) {
     case 'twin': {
       r.verdict = c.oneOf('verdict', parsed.verdict, ['yes', 'yes_with_tradeoffs', 'not_yet', 'no'], 'yes_with_tradeoffs');
-      const main = c.sim('recommended_sim', parsed.recommended_sim);
+      r.followUp = c.text('follow_up', parsed.follow_up, false, 300) || undefined;
+      // Asking for a missing amount is the one case where no fork is needed yet.
+      const askingForAmount = !!r.followUp && state.sims.size === 0 && r.verdict === 'not_yet';
+      const main = askingForAmount ? undefined : c.sim('recommended_sim', parsed.recommended_sim);
       const alts = (Array.isArray(parsed.alternative_sims) ? parsed.alternative_sims : []).map((s: unknown, i: number) => c.sim(`alternative_sims[${i}]`, s, false)).filter(Boolean) as Sim[];
       const tradeoffs = c.texts('tradeoffs', parsed.tradeoffs, 4);
       if (main) {
@@ -347,6 +351,13 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
       break;
     }
   }
+  if (Array.isArray(parsed.sources)) {
+    r.sources = parsed.sources
+      .filter((x: any) => typeof x?.url === 'string' && state.sources.has(x.url))
+      .slice(0, 4)
+      .map((x: any) => ({ title: state.sources.get(x.url)!, url: x.url }));
+  }
+  if (!r.followUp && typeof parsed.follow_up === 'string') r.followUp = c.text('follow_up', parsed.follow_up, false, 300) || undefined;
   return c.errors.length ? { result: null, errors: c.errors } : { result: r, errors: [] };
 }
 
