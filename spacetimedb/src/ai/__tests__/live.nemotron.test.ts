@@ -33,8 +33,14 @@ const curlHttp: HttpLike = {
     const headerFile = join(dir, 'h');
     writeFileSync(headerFile, Object.entries(init.headers).map(([k, v]) => `${k}: ${v}`).join('\n'), { mode: 0o600 });
     try {
-      const out = execFileSync('curl', ['-sS', '-X', init.method, url, '-H', `@${headerFile}`, '--data-binary', '@-', '--max-time', '90', '-w', '\n%{http_code}'], {
-        input: init.body,
+      // Hard limits on both sides: curl gives up after 90s, Node kills it after 100s. GET sends no body.
+      const isGet = init.method === 'GET';
+      const args = ['-sS', '-X', init.method, url, '-H', `@${headerFile}`, '--connect-timeout', '15', '--max-time', '90', '-w', '\n%{http_code}'];
+      if (!isGet) args.push('--data-binary', '@-');
+      const out = execFileSync('curl', args, {
+        timeout: 100_000,
+        input: isGet ? '' : init.body,
+        stdio: ['pipe', 'pipe', 'pipe'],
         maxBuffer: 20 * 1024 * 1024,
       }).toString();
       const nl = out.lastIndexOf('\n');
