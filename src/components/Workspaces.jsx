@@ -1,4 +1,4 @@
-import React,{useState,useEffect,useMemo} from 'react';
+import React,{useState,useEffect,useMemo,useRef} from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import {ResponsiveContainer,ComposedChart,Area,Line,CartesianGrid,XAxis,YAxis,Tooltip,ReferenceLine} from 'recharts';
 import {useHousehold,PinPad,JoinHousehold} from '../HouseholdSession';
@@ -48,11 +48,19 @@ function CoachChat({s,agentForks}){
   const active=thread===null?latest:thread;
   const turns=active?rows.filter(r=>coachThreadOf(r)===active):[];
   const threadForks=agentForks.filter(p=>turns.some(t=>String(t.scenarioId)===String(p.id)));
-  async function send(e){e.preventDefault();const text=question.trim();if(!text)return;setBusy(true);try{await s.act('ask_coach',{message:text,threadInsightId:active?BigInt(active):0n});setQuestion('');setThread(null)}catch{}finally{setBusy(false)}}
+  // Keep the newest message in view, like a messaging app. New replies only pull the view down if the
+  // person was already near the bottom; sending or typing always does.
+  const threadRef=useRef(null),nearBottom=useRef(true);
+  const toBottom=(smooth=true)=>{const el=threadRef.current;if(el)el.scrollTo({top:el.scrollHeight,behavior:smooth?'smooth':'auto'})};
+  const last=turns[turns.length-1];
+  const lastKey=last?`${String(last.id)}:${last.status}:${(last.resultJson||'').length}`:'';
+  useEffect(()=>{if(nearBottom.current)toBottom()},[lastKey,turns.length,active]);
+  useEffect(()=>{toBottom(false)},[active]);
+  async function send(e){e.preventDefault();const text=question.trim();if(!text)return;setBusy(true);nearBottom.current=true;toBottom();try{await s.act('ask_coach',{message:text,threadInsightId:active?BigInt(active):0n});setQuestion('');setThread(null)}catch{}finally{setBusy(false);toBottom()}}
   return <section className="workspace-card coach-chat">
     <div className="coach-chat-head"><h3>Financial coach</h3>{turns.length>0&&<button type="button" className="coach-new" onClick={()=>setThread('')}>New conversation</button>}</div>
     <p className="workspace-copy">Ask about anything you're thinking of buying or changing. Nemotron checks prices online, runs the numbers on your household, and talks it through with you.</p>
-    <div className="coach-thread" aria-live="polite">
+    <div className="coach-thread" aria-live="polite" ref={threadRef} onScroll={e=>{const el=e.currentTarget;nearBottom.current=el.scrollHeight-el.scrollTop-el.clientHeight<80}}>
       {turns.length===0&&<p className="coach-empty">Try "I want to buy a Rolex" or "Can we afford a trip to Japan in March?"</p>}
       {turns.map(row=>{const r=coachResult(row);return <React.Fragment key={String(row.id)}>
         <div className="coach-bubble coach-user">{row.question}</div>
@@ -67,7 +75,7 @@ function CoachChat({s,agentForks}){
         </div>
       </React.Fragment>})}
     </div>
-    <form className="workspace-form coach-input" onSubmit={send}><Field label={turns.length?'Reply':'Message'}><textarea required maxLength={300} value={question} onChange={e=>setQuestion(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form.requestSubmit()}}} placeholder={turns.length?'Ask a follow-up…':'I want to buy a Rolex'}/></Field><button className="workspace-button" disabled={busy||!s.capabilities.ask_coach}>{busy?'Sending…':turns.length?'Send':'Ask Coach'}</button></form>
+    <form className="workspace-form coach-input" onSubmit={send}><Field label={turns.length?'Reply':'Message'}><textarea required maxLength={300} value={question} onChange={e=>{setQuestion(e.target.value);nearBottom.current=true;toBottom()}} onFocus={()=>{nearBottom.current=true;toBottom()}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form.requestSubmit()}}} placeholder={turns.length?'Ask a follow-up…':'I want to buy a Rolex'}/></Field><button className="workspace-button" disabled={busy||!s.capabilities.ask_coach}>{busy?'Sending…':turns.length?'Send':'Ask Coach'}</button></form>
     {threadForks.map(p=><a className="agent-result-card" key={String(p.id)} href="#futures"><GitBranch size={18}/><div><strong>{p.title}</strong><p>{p.explanation}</p><small>{p.status} · open in Futures</small><ImpactDiff scenarioId={p.id} parentId={p.parentId}/></div></a>)}
   </section>;
 }
