@@ -64,7 +64,7 @@ function formatSlot(key: string, v: unknown): string {
 export function fillSlots(text: string, state: AgentState): { text: string; unknown: string[] } {
   const unknown: string[] = [];
   const now = forecastSummary(state) as Record<string, unknown>;
-  const out = text.replace(SLOT, (m, src: string, a: string, b?: string) => {
+  const out = text.replace(/(\{[^}]*_pct[^}]*\})%/g, '$1').replace(SLOT, (m, src: string, a: string, b?: string) => {
     let obj: Record<string, unknown> | undefined;
     if (src === 'now') obj = now;
     else if (src === 'savings') obj = state.lastSavings ?? undefined;
@@ -223,11 +223,13 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
         c.errors.push('mild, expected and severe must be different simulations (change the duration, percent or amount), not the same sim reused');
       }
       const weakest = c.text('weakest_point', parsed.weakest_point, true, 300);
-      const mitigations = (Array.isArray(parsed.mitigations) ? parsed.mitigations : []).slice(0, 3).map((x: any, i: number) => ({
-        sim: c.sim(`mitigations[${i}].sim_id`, x?.sim_id),
-        title: typeof x?.title === 'string' ? x.title.slice(0, 60) : `Mitigation ${i + 1}`,
-        why: c.text(`mitigations[${i}].why`, x?.why, false, 300),
-      }));
+      const scenarioSims = new Set(scenarios.map((s: any) => s.sim).filter(Boolean));
+      const mitigations = (Array.isArray(parsed.mitigations) ? parsed.mitigations : []).slice(0, 3).map((x: any, i: number) => {
+        const sim = c.sim(`mitigations[${i}].sim_id`, x?.sim_id);
+        if (sim && scenarioSims.has(sim)) c.errors.push(`mitigations[${i}] reuses a scenario fork; a mitigation must be its own simulated fork with the fix applied`);
+        // Display the fork's own title so the advice always matches what was simulated.
+        return { sim, title: sim?.title ?? `Mitigation ${i + 1}`, why: c.text(`mitigations[${i}].why`, x?.why, false, 300) };
+      });
       const expected = scenarios.find((s: any) => s.severity === 'expected')?.sim ?? scenarios[0]?.sim;
       if (expected) r.highlights = highlightsFromDiff(expected.diff);
       r.scenarios = [...scenarios.map((s: any) => s.sim), ...mitigations.map((m: any) => m.sim)].filter(Boolean).filter((s: Sim, i: number, a: Sim[]) => a.indexOf(s) === i).map(draft);

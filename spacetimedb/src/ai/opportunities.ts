@@ -69,7 +69,7 @@ export function findOpportunities(snap: Snapshot, baseline: TwinResult): Opportu
         scope: scopeOf(s.owner),
         owner: s.owner,
         title: `${merchantName(s.merchant)} went up`,
-        evidence: { merchant: s.merchant, before: round(prev.amount * 100) / 100, after: round(last.amount * 100) / 100, increase_per_month: Math.round(inc * 100) / 100, increase_per_year: round(inc * 12), since: dayToLabel(last.day) },
+        evidence: { merchant: s.merchant, old_price: round(prev.amount * 100) / 100, new_price: round(last.amount * 100) / 100, increase_per_month: Math.round(inc * 100) / 100, increase_per_year: round(inc * 12), cancelling_entirely_saves_per_month: round(last.amount * 100) / 100, since: dayToLabel(last.day) },
         est_monthly_savings: Math.round(last.amount * 100) / 100,
         effort: 'low',
         free: true,

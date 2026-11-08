@@ -127,7 +127,7 @@ describe('tools and opportunities', () => {
     const state = newState('opportunity', buildSnapshot(patelInput()), 'scan');
     const opps = getOpportunities(state);
     const sub = opps.find(o => o.type === 'subscription_increase');
-    expect(sub?.evidence.after).toBe(22.99);
+    expect(sub?.evidence.new_price).toBe(22.99);
     expect(opps.some(o => o.type === 'high_apr_payoff')).toBe(true);
   });
 
@@ -195,5 +195,18 @@ describe('live-run fixes, round 2', () => {
     const s = newState('ripple', buildSnapshot(patelInput()), 'x');
     const broken = '[{"kind": "one_time", "amount": 100, "date": "2026-12-01", "label": "x"}';
     expect((executeTool(s, 'simulate_scenario', { title: 'a', levers: broken }) as any).sim_id).toBe('sim_1');
+  });
+});
+
+describe('live-run fixes, round 3', () => {
+  it('salvages the valid levers from a malformed list string and exposes one-time totals', () => {
+    const s = newState('life_event', buildSnapshot(patelInput()), 'x');
+    const broken = '[{"kind": "one_time", "amount": 100, "date": "2027-06-01", "label": "a"}, {"kind": "one_time", "amount": 50, "date": "2027-06-01", "label": "b"}, {"kind": "one_time", "amou';
+    const out = executeTool(s, 'simulate_scenario', { title: 'w', levers: broken }) as any;
+    expect(out.one_time_costs_total).toBe(150);
+  });
+  it('suggests next year when an end date lands before the start', () => {
+    const snap = buildSnapshot(patelInput());
+    expect(() => resolveLever(snap.twin, { kind: 'recurring_change', category: 'other', monthly_delta: 350, start_date: '2026-11-08', end_date: '2026-05-31', label: 'x' })).toThrow(/Did you mean 2027-05-31/);
   });
 });

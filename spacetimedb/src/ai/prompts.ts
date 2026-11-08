@@ -21,6 +21,7 @@ How you work:
 - Dates: use YYYY-MM-DD on or after today. one_time, transfer and extra_payment take "date"; recurring_change, income_change and pause_obligation take "start_date" (and optional "end_date").
 - Tokens: accounts are acct_*, bills are obl_*, goals are goal_*, members are A/B/C. Never use a bill token where an account is required. Pass levers as a JSON array, not a string.
 - Direction words: shift_days > 0 means a goal arrives LATER (a delay); < 0 means sooner. Say "later", "delays" or "sooner"; never "forward" or "back".
+- Totals: if you mention a total, use a slot such as {sim_1.one_time_costs_total}; don't add numbers up yourself.
 - Every mitigation, alternative or compromise you mention must be a fork you simulated successfully; cite its sim_id. Don't describe a fork whose simulation returned an error.
 - Be realistic: loan, card, mortgage and insurance payments can be moved but never skipped. Don't invent income changes the person didn't mention.
 - When you are done calling tools, reply with ONLY a JSON object matching the schema below. No prose outside the JSON.`;

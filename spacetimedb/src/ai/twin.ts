@@ -78,6 +78,12 @@ function day(data: TwinData, iso: unknown, name: string, optional = false): numb
   return snapped;
 }
 
+function endHint(end: unknown, start: number): string {
+  const e = String(end);
+  const nextYear = /^\d{4}-/.test(e) ? `${Number(e.slice(0, 4)) + 1}${e.slice(4, 10)}` : '';
+  return `end_date ${e} must be after start_date ${dayToIso(start)}${nextYear ? `. Did you mean ${nextYear}?` : ''}`;
+}
+
 function amount(v: unknown, name: string, allowNegative = false): number {
   const n = num(v, name);
   if (!allowNegative && n <= 0) throw new LeverError(`${name} must be positive`);
@@ -161,7 +167,7 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
       }
       const start = day(data, l.start_date, 'start_date');
       const end = day(data, l.end_date, 'end_date', true);
-      if (end !== -1 && end <= start) throw new LeverError(`end_date ${String(l.end_date)} must be after start_date ${dayToIso(start)}`);
+      if (end !== -1 && end <= start) throw new LeverError(endHint(l.end_date, start));
       return {
         ...base,
         label: cleanLabel(l.label, `${category} change`),
@@ -176,7 +182,7 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
       if (!member) throw new LeverError(`member must be one of ${data.members.map(m => m.token).join(', ')}`);
       const start = day(data, l.start_date, 'start_date');
       const end = day(data, l.end_date, 'end_date', true);
-      if (end !== -1 && end <= start) throw new LeverError(`end_date ${String(l.end_date)} must be after start_date ${dayToIso(start)}`);
+      if (end !== -1 && end <= start) throw new LeverError(endHint(l.end_date, start));
       const hasPct = l.percent !== undefined && l.percent !== null;
       const pct = hasPct ? num(l.percent, 'percent') : 0;
       if (hasPct && (pct < -100 || pct > 200)) throw new LeverError('percent must be between -100 and 200');

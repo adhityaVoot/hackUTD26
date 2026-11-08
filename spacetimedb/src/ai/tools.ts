@@ -238,6 +238,7 @@ export function diffView(s: Sim) {
     monthly_surplus_before: d.monthlySurplusBefore,
     monthly_surplus_after: d.monthlySurplusAfter,
     cash_runs_out_in_days: s.survivalDays < 0 ? 'not within 2 years' : s.survivalDays,
+    one_time_costs_total: Math.round(s.levers.filter(l => l.kind === 'one_time' && !l.flowIn).reduce((t, l) => t + l.amount, 0)),
   };
 }
 
@@ -301,7 +302,14 @@ function leversArg(args: Record<string, unknown>): Lever[] {
     try {
       v = JSON.parse(`[${inner}]`);
     } catch {
-      return [];
+      // Salvage every flat {...} object that parses on its own.
+      v = (inner.match(/\{[^{}]*\}/g) ?? []).flatMap(o => {
+        try {
+          return [JSON.parse(o)];
+        } catch {
+          return [];
+        }
+      });
     }
   }
   if (v && !Array.isArray(v) && typeof v === 'object') v = [v];
