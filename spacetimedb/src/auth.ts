@@ -17,6 +17,24 @@ type EnvKey =
   | 'ADMIN_CODE';
 
 const STEP_UP_WINDOW_MICROS = 5n * 60n * 1_000_000n;
+export const PIN_FAIL_WINDOW_MICROS = 10n * 60n * 1_000_000n;
+export const PIN_LOCKOUT_MICROS = 5n * 60n * 1_000_000n;
+export const PIN_MAX_FAILURES = 5;
+
+/**
+ * DEMO ONLY. This module SDK has no SHA-256 helper, so the digest is a
+ * salted FNV-1a. Production step-up uses passkeys through an OIDC provider
+ * (SpacetimeAuth supports this).
+ */
+export function demoPinDigest(personId: bigint, pin: string): string {
+  const salted = `DEMO|${personId}|${pin}`;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < salted.length; i += 1) {
+    hash ^= salted.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `DEMO-FNV1A:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
 
 export function stepUpValidUntilMicros(stepUpAtMicros: bigint): bigint {
   return stepUpAtMicros + STEP_UP_WINDOW_MICROS;

@@ -34,8 +34,12 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AdminSeedDemoReducer from "./admin_seed_demo_reducer";
+import JoinHouseholdReducer from "./join_household_reducer";
+import SetPinReducer from "./set_pin_reducer";
 
 // Import all procedure arg schemas
+import * as VerifyPinProcedure from "./verify_pin_procedure";
 
 // Import all table schema definitions
 import MyMemberRow from "./my_member_table";
@@ -55,10 +59,14 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("admin_seed_demo", AdminSeedDemoReducer),
+  __reducerSchema("join_household", JoinHouseholdReducer),
+  __reducerSchema("set_pin", SetPinReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
+  __procedureSchema("verify_pin", VerifyPinProcedure.params, VerifyPinProcedure.returnType),
 );
 
 /** The remote SpacetimeDB module schema, both runtime and type information. */

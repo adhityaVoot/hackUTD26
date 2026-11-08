@@ -205,6 +205,9 @@ export function patelConfig(): PersonaConfig {
 
 export const DEMO_PATELS: PersonaConfig = patelConfig();
 
+/** Stored on household.seed and passed to generateHousehold for the Patel demo. */
+export const DEMO_SEED = 20261101;
+
 function backtestConfig(index: number, r: () => number): PersonaConfig {
   const income = Math.round((300_000 + r() * 900_000) / 100) * 100;
   const fixedFrac = 0.35 + r() * 0.3;

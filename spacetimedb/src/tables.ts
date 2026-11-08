@@ -32,6 +32,9 @@ export const member = table({ name: 'member' }, {      // a connected identity (
   online: t.bool(),
   lastActiveAt: t.timestamp(),
   stepUpAt: t.timestamp(),                // last successful PIN check
+  pinFailCount: t.u32().default(0),       // failures inside the current 10-minute window
+  pinFailWindowStartMicros: t.i64().default(0n),
+  pinLockedUntilMicros: t.i64().default(0n),
 });
 
 // ---------- Accounts & activity ----------

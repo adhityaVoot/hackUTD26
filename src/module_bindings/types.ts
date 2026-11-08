@@ -223,6 +223,9 @@ export const Member = __t.object("Member", {
   online: __t.bool(),
   lastActiveAt: __t.timestamp(),
   stepUpAt: __t.timestamp(),
+  pinFailCount: __t.u32(),
+  pinFailWindowStartMicros: __t.i64(),
+  pinLockedUntilMicros: __t.i64(),
 });
 export type Member = __Infer<typeof Member>;
 

@@ -6,5 +6,11 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AdminSeedDemoReducer from "../admin_seed_demo_reducer";
+import JoinHouseholdReducer from "../join_household_reducer";
+import SetPinReducer from "../set_pin_reducer";
 
+export type AdminSeedDemoParams = __Infer<typeof AdminSeedDemoReducer>;
+export type JoinHouseholdParams = __Infer<typeof JoinHouseholdReducer>;
+export type SetPinParams = __Infer<typeof SetPinReducer>;
 

@@ -6,5 +6,8 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
+import * as VerifyPinProcedure from "../verify_pin_procedure";
 
+export type VerifyPinArgs = __Infer<typeof VerifyPinProcedure.params>;
+export type VerifyPinResult = __Infer<typeof VerifyPinProcedure.returnType>;
 
