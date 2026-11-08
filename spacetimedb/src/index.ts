@@ -668,6 +668,7 @@ export const {
   openNegotiation,
   submitPosition,
   requestMediation,
+  mediateNegotiation,
   closeNegotiation,
   recordDecision,
   shareInsight,

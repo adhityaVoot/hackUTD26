@@ -389,13 +389,53 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
     },
   );
 
-  const requestMediation = spacetimedb.reducer({ negotiationId: t.u64() }, (ctx, { negotiationId }) => {
+  /** Negotiation Room flow: mediate once members have written their positions. */
+  const mediateNegotiation = spacetimedb.reducer({ negotiationId: t.u64() }, (ctx, { negotiationId }) => {
     const me = requireMember(ctx);
     const neg = ctx.db.negotiation.id.find(negotiationId);
     if (!neg || neg.householdId !== me.household.id) throw new SenderError('Negotiation not found');
     const positions = [...ctx.db.negotiationPosition.negotiationId.filter(negotiationId)];
     if (positions.length < 2) throw new SenderError('At least two members need to add a position first');
     enqueue(ctx, me, 'negotiation', neg.topic, 0n, { negotiationId: String(negotiationId) });
+  });
+
+  /**
+   * Mediator for two conflicting proposals (the frontend's "Ask Mediator"). Opens a negotiation whose
+   * positions are the two proposals, then runs the same household-view mediation.
+   */
+  const requestMediation = spacetimedb.reducer({ scenarioIdA: t.u64(), scenarioIdB: t.u64() }, (ctx, { scenarioIdA, scenarioIdB }) => {
+    const me = requireMember(ctx);
+    if (scenarioIdA === scenarioIdB) throw new SenderError('Pick two different proposals');
+    const pick = (id: bigint) => {
+      const sc = ctx.db.scenario.id.find(id);
+      if (!sc || sc.householdId !== me.household.id) throw new SenderError('Proposal not found');
+      if (sc.scope !== 'household') throw new SenderError('Only household proposals can be mediated');
+      return sc;
+    };
+    const a = pick(scenarioIdA);
+    const b = pick(scenarioIdB);
+    const neg = ctx.db.negotiation.insert({
+      id: 0n,
+      householdId: me.household.id,
+      topic: `${a.title} vs ${b.title}`.slice(0, 140),
+      status: 'open',
+      openedByPersonId: me.person.id,
+      insightId: 0n,
+      createdAt: ctx.timestamp,
+    });
+    for (const sc of [a, b]) {
+      const changes = [...ctx.db.scenarioChange.scenarioId.filter(sc.id)].map(c => c.label).filter(Boolean);
+      ctx.db.negotiationPosition.insert({
+        id: 0n,
+        negotiationId: neg.id,
+        householdId: me.household.id,
+        personId: sc.authorPersonId || me.person.id,
+        want: `${sc.title}${changes.length ? `: ${changes.join('; ')}` : ''}`.slice(0, 400),
+        priority: 3,
+        updatedAt: ctx.timestamp,
+      });
+    }
+    enqueue(ctx, me, 'negotiation', neg.topic, 0n, { negotiationId: String(neg.id) });
   });
 
   const closeNegotiation = spacetimedb.reducer({ negotiationId: t.u64() }, (ctx, { negotiationId }) => {
@@ -456,7 +496,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
 
   // ----- Conversational coach, Health Check, Briefing -----
   /** One chat box: Nemotron routes the message to the right workflow. Pass the first insight id of a thread to follow up. */
-  const askCoach = spacetimedb.reducer({ message: t.string(), threadInsightId: t.u64() }, (ctx, { message, threadInsightId }) => {
+  const askCoach = spacetimedb.reducer({ question: t.string(), threadInsightId: t.u64() }, (ctx, { question, threadInsightId }) => {
     const me = requireMember(ctx);
     let threadId = '';
     if (threadInsightId !== 0n) {
@@ -464,7 +504,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
       if (!first || first.householdId !== me.household.id || first.requesterPersonId !== me.person.id) throw new SenderError('Conversation not found');
       threadId = (JSON.parse(first.contextJson || '{}') as Record<string, string>).threadId || String(first.id);
     }
-    const ins = enqueue(ctx, me, 'coach', cleanText(message, 'message'), me.person.id, threadId ? { threadId } : {});
+    const ins = enqueue(ctx, me, 'coach', cleanText(question, 'question'), me.person.id, threadId ? { threadId } : {});
     if (!threadId) ctx.db.aiInsight.id.update({ ...ins, contextJson: JSON.stringify({ threadId: String(ins.id) }) });
   });
 
@@ -699,6 +739,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
     openNegotiation,
     submitPosition,
     requestMediation,
+    mediateNegotiation,
     closeNegotiation,
     recordDecision,
     shareInsight,

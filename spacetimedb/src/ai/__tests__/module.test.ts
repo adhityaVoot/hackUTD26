@@ -181,9 +181,9 @@ describe('Nemotron module end to end', () => {
     (mod.openNegotiation as any)(reducerCtx(PRIYA), { topic: 'Spring spending' });
     const negId = store.rows('negotiation')[0].id;
     (mod.submitPosition as any)(reducerCtx(PRIYA), { negotiationId: negId, want: 'Send Maya $350 a month through May', priority: 4 });
-    expect(() => (mod.requestMediation as any)(reducerCtx(SAM), { negotiationId: negId })).toThrow(/two members/);
+    expect(() => (mod.mediateNegotiation as any)(reducerCtx(SAM), { negotiationId: negId })).toThrow(/two members/);
     (mod.submitPosition as any)(reducerCtx(SAM), { negotiationId: negId, want: 'Japan trip in March, about $3,200', priority: 3 });
-    (mod.requestMediation as any)(reducerCtx(SAM), { negotiationId: negId });
+    (mod.mediateNegotiation as any)(reducerCtx(SAM), { negotiationId: negId });
 
     const http = scripted([() => ({ status: 500, body: {} })]);
     runJobs(http);
@@ -227,13 +227,13 @@ describe('Sentinel watch and coach threads (module)', () => {
   });
 
   it('coach: routes, keeps the thread, and only the owner can continue it', () => {
-    (mod.askCoach as any)(reducerCtx(PRIYA), { message: 'How are we doing?', threadInsightId: 0n });
+    (mod.askCoach as any)(reducerCtx(PRIYA), { question: 'How are we doing?', threadInsightId: 0n });
     const first = store.rows('aiInsight')[0];
     expect(JSON.parse(first.contextJson).threadId).toBe(String(first.id));
     runJobs(scripted([() => ({ status: 500, body: {} })]));
     expect(JSON.parse(store.rows('aiInsight')[0].resultJson).kind).toBe('health');
-    expect(() => (mod.askCoach as any)(reducerCtx(SAM), { message: 'And next month?', threadInsightId: first.id })).toThrow(/not found/);
-    (mod.askCoach as any)(reducerCtx(PRIYA), { message: 'What is coming up next month?', threadInsightId: first.id });
+    expect(() => (mod.askCoach as any)(reducerCtx(SAM), { question: 'And next month?', threadInsightId: first.id })).toThrow(/not found/);
+    (mod.askCoach as any)(reducerCtx(PRIYA), { question: 'What is coming up next month?', threadInsightId: first.id });
     const http = scripted([() => ({ status: 500, body: {} })]);
     runJobs(http);
     const second = store.rows('aiInsight')[1];
@@ -241,5 +241,17 @@ describe('Sentinel watch and coach threads (module)', () => {
     // The router saw the earlier turn.
     expect(JSON.stringify(http.calls[0])).toContain('How are we doing?');
     expect(JSON.parse(second.resultJson).extra.routedTo).toBe('briefing');
+  });
+});
+
+describe('frontend contract (NemoTrial)', () => {
+  it("request_mediation takes two proposals, as the frontend's Ask Mediator sends", () => {
+    const sc = (title: string, author: bigint) => store.db.scenario.insert({ id: 0n, householdId: 1n, parentId: 50n, authorPersonId: author, agentKind: '', title, explanation: '', status: 'proposed', scope: 'household', audiencePersonId: 0n, createdAt: NOW, computedAtDay: -1 });
+    const a = sc('Help Maya with $350 rent', PRIYA);
+    const b = sc('Japan trip in March, $3,200', SAM);
+    (mod.requestMediation as any)(reducerCtx(PRIYA), { scenarioIdA: a.id, scenarioIdB: b.id });
+    const positions = store.rows('negotiationPosition');
+    expect(positions.map((p: any) => p.personId)).toEqual([PRIYA, SAM]);
+    expect(store.rows('aiInsight')[0]).toMatchObject({ kind: 'negotiation', audiencePersonId: 0n });
   });
 });

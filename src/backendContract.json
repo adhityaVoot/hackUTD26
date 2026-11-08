@@ -48,6 +48,10 @@
       "adminCode",
       "inviteCode"
     ],
+    "ask_coach": [
+      "question",
+      "threadInsightId"
+    ],
     "create_grant": [
       "accountId",
       "granteePersonId",
@@ -85,6 +89,10 @@
     "renew_grant": [
       "grantId",
       "durationSeconds"
+    ],
+    "request_mediation": [
+      "scenarioIdA",
+      "scenarioIdB"
     ],
     "revoke_grant": [
       "grantId"
