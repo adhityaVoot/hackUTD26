@@ -2,6 +2,7 @@ import React,{useState,useEffect,useRef} from 'react';
 import {ResponsiveContainer,LineChart,Line,XAxis,YAxis,Tooltip,CartesianGrid,Legend,ReferenceLine} from 'recharts';
 import {ShieldAlert,Waves,HeartPulse,PiggyBank,CalendarClock,Sparkles,CheckCircle2,Search,Calculator,PenLine,ShieldCheck,Route,Bot,Wand2,ListChecks,Scale,ThumbsUp,ThumbsDown,Gavel,MessageCircle,Send,Users,RotateCcw} from 'lucide-react';
 import {useHousehold} from '../HouseholdSession';
+import {visiblePlanTitle} from '../plannerData';
 import './nemotron-lab.css';
 
 // Day 0 of the simulation is Nov 1, 2026 (same epoch as the engine and the rest of the app).
@@ -86,7 +87,7 @@ function ProposeButtons({result}){
   const plans=(result?.scenarios||[]).filter(x=>x.proposable&&x.scenarioId);
   if(!plans.length||!s.capabilities?.propose_agent_plan)return null;
   const statusOf=id=>(s.householdScenarios||[]).find(x=>String(x.id)===String(id))?.status;
-  const label=(p,st,done)=>st==='merged'?`Applied: ${p.title} (no approval needed)`:st==='proposed'||done?`Sent for approval: ${p.title}`:`Send "${p.title}" for approval`;
+  const label=(p,st,done)=>st==='merged'?`Applied: ${visiblePlanTitle(p.title)} (no approval needed)`:st==='proposed'||done?`Sent for approval: ${visiblePlanTitle(p.title)}`:`Send "${visiblePlanTitle(p.title)}" for approval`;
   return <div className="lab-propose">{plans.slice(0,3).map(p=>{const st=statusOf(p.scenarioId);const done=sent[p.scenarioId]||(st&&st!=='draft');
     return <button key={p.scenarioId} className={'lab-propose-btn'+(st==='merged'?' applied':'')} disabled={!!done||busy===p.scenarioId} onClick={async()=>{setBusy(p.scenarioId);try{await s.act('propose_agent_plan',{scenarioId:BigInt(p.scenarioId)});setSent(v=>({...v,[p.scenarioId]:true}))}catch{}finally{setBusy('')}}}>
       {st==='merged'?<CheckCircle2 size={14}/>:<Users size={14}/>}{busy===p.scenarioId?'Sending…':label(p,st,done)}</button>})}</div>;
