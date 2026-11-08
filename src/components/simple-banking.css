@@ -10,3 +10,4 @@
 .account-owner-access h3{display:flex;align-items:center;gap:8px}.account-owner-access{margin:18px 0}.simple-request-list .simple-status{font-size:11px;text-transform:uppercase;letter-spacing:.04em}
 
 .approval-progress{margin:6px 0 0;font-size:.85rem;opacity:.85}
+.approval-rules ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:.92rem}

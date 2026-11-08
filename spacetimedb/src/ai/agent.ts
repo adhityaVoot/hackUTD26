@@ -8,7 +8,7 @@
 //  4. Propose: the verified result plus its forks. If anything fails, a deterministic fallback
 //     answers from the same engine, so the app never depends on the model being up.
 
-import { diffView } from './tools';
+import { diffView, forecastSummary, vitalsView } from './tools';
 import { fallback, finalize, healthCandidates, verifyText } from './features';
 import { checkNumbers, collectNumbers, redactNames, sanitizeUserText, scanOutbound } from './gateway';
 import { chat, extractJson, type ChatMessage, type HttpLike, type ModelConfig, type ToolSpec } from './model';
@@ -89,7 +89,7 @@ export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
   }
 
   const names = state.snap.map.nameToToken;
-  if (state.feature === 'health') {
+  if (state.feature === 'health' || state.feature === 'advisor') {
     const cands = healthCandidates(state);
     preload.candidate_moves = cands.map(s => diffView(s));
     collectNumbers(preload.candidate_moves, state.allowedNumbers);
@@ -261,6 +261,9 @@ function review(state: AgentState, result: InsightResult, cfg: ModelConfig, deps
     spending_budget: state.lastBudget,
     prices_found_online: state.prices.slice(0, 8),
     household_now: { cash: state.baseline.startLiquid, buffer: state.baseline.buffer, monthly_surplus: state.baseline.monthlySurplus },
+    // Where things stand today, so the Reviewer can tell a move's effect from the current status.
+    current_vitals: vitalsView(state.baseline),
+    goals_today: forecastSummary(state).goals,
   };
   const names = state.snap.map.nameToToken;
   const payload = redactNames(

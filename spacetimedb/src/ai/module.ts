@@ -518,6 +518,12 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
     proposeScenario(ctx, scenarioId);
   });
 
+  /** Review my accounts: overall advice on every account, card and loan, with ready-to-approve moves. */
+  const requestAccountReview = spacetimedb.reducer(ctx => {
+    const me = requireMember(ctx);
+    enqueue(ctx, me, 'advisor', 'Review my accounts and tell me what to do', me.person.id);
+  });
+
   /** Debate it: Advocate vs Skeptic on a decision, then a Judge's verdict. */
   const debateDecision = spacetimedb.reducer({ decision: t.string() }, (ctx, { decision }) => {
     const me = requireMember(ctx);
@@ -778,6 +784,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
     askCoach,
     debateDecision,
     proposeAgentPlan,
+    requestAccountReview,
     requestHealthCheck,
     requestBriefing,
     startNemotronWatch,

@@ -664,6 +664,7 @@ export const {
   askCoach,
   debateDecision,
   proposeAgentPlan,
+  requestAccountReview,
   requestHealthCheck,
   requestBriefing,
   startNemotronWatch,

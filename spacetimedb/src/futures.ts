@@ -158,6 +158,16 @@ export function proposeScenario(ctx: Ctx, scenarioId: bigint): void {
     scope: scope === 'individual' ? 'household' : scope,
     computedAtDay: me.household.simDay,
   });
+  // A co-owner's own proposal counts as their approval; it then waits only for the other co-owners
+  // (a single-co-owner household merges right away).
+  if (me.person.role === 'coowner') {
+    ctx.db.approval.insert({ id: 0n, scenarioId, householdId: me.household.id, personId: me.person.id, decision: 'approve', at: ctx.timestamp });
+    const coowners = listed(ctx.db.person.householdId.filter(me.household.id)).filter(row => row.role === 'coowner');
+    if (coowners.every(row => row.id === me.person.id)) {
+      mergeScenario(ctx, scenarioId);
+      return;
+    }
+  }
   for (const person of listed(ctx.db.person.householdId.filter(me.household.id))) {
     if (person.role !== 'coowner' || person.id === me.person.id) continue;
     ctx.db.alert.insert({

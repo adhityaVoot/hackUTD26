@@ -95,3 +95,9 @@
 .nemotron-lab .coach-user{align-self:flex-end;margin-left:auto;margin-bottom:8px;display:block;width:fit-content}
 .studio-hint-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;justify-content:space-between}
 .studio-hint-row .lab-hint{flex:1 1 260px}
+
+.review-accounts{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;font-size:1rem;padding:10px 18px}
+.lab-actions{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:6px}
+.lab-actions li strong{display:block}
+.lab-actions li span{font-size:.9rem;opacity:.85}
+.lab-propose-btn.applied{border-color:rgba(99,102,241,.6);background:rgba(99,102,241,.12)}

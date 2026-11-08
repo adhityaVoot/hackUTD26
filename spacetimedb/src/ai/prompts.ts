@@ -90,6 +90,12 @@ If context.mode is "sentinel", overdraft risk has crossed 25%: you MUST simulate
     task: 'Debate only.',
     schema: '{}',
   },
+  advisor: {
+    task: `Feature: Account Review. The member tapped "Review my accounts". Act as their personal financial advisor for everything on the Accounts tab: checking and savings cash, credit cards (balances, APR, utilization), loans and mortgage (APR, payments), bills, goals and the 60-day outlook.
+Steps: read the overview, vitals and forecast. observations.candidate_moves were already simulated by the engine (each has a sim_id): typical moves are paying down a high-APR card from checking, moving idle cash to savings, moving a bill after payday, trimming flexible spending. You may simulate one or two of your own (prefer transfers between the member's own accounts and extra payments; never skip a debt payment). Pick the 1-3 moves that help most without making another vital worse by a band.
+Then write: an overall read of where they stand (what's healthy, what needs attention) in 2-4 conversational sentences addressed to "you", and the moves in priority order, each with why it matters in one sentence. Every move must cite a sim_id. Mention that they can send a move for approval with one tap.`,
+    schema: `{"title": string, "answer": string (2-4 sentences: the overall read), "actions": [{"sim_id": "sim_N", "title": string (short imperative, e.g. "Pay $1,200 toward the 22.99% card"), "why": string}] (1-3, highest impact first), "follow_up": string (one question back to the member)}`,
+  },
   opportunity: {
     task: `Feature: Opportunity Radar. Call find_opportunities, then choose up to three. saves_per_month is a monthly, recurring saving (say "a month"); for a subscription increase, distinguish the increase (increase_per_month) from cancelling entirely (cancelling_entirely_saves_per_month). Choose up to three that matter most for this household right now and explain each in one or two sentences. If a crunch is forecast (in_crunch true), free fixes come first. For an opportunity with has_fix true you may simulate its fix to show the effect. Individual items belong to their owner; never mention another member's individual items.`,
     schema: `{"title": string, "answer": string (1-2 sentences), "picks": [{"opportunity": "opp_N", "why": string, "sim_id": "sim_N" (optional)}]}`,
@@ -114,6 +120,7 @@ Check the draft against "facts" and the member's request:
 3. The safety buffer is a fixed line, never money that gets "used up" or "drawn down".
 3b. If a simulation has decision_beyond_60_days true, its 60-day figures can't change; saying the cushion or lowest cash "stays intact" is misleading. The 12-month figure (lowest_cash_12_months_after) and goal shifts are what matter.
 4. Nothing invented: no destinations, dates, durations, prices or costs that aren't in the request, the conversation or the facts.
+4b. Today vs. effect: current_vitals and goals_today describe where the household stands NOW (e.g. a goal already 201 days late). A simulation's shift_days is the EFFECT of that one move. Never report a move's shift as the current status, and never call a figure from current_vitals or goals_today invented.
 5. It answers what was asked, respects the member's stated constraints (budget, style, dates), and doesn't repeat itself.
 6. Voice: conversational, addressed to "you", 2-4 sentences, plain English.
 If the draft is sound, approve it. If not, rewrite "answer" fixing every issue: use only numbers that appear in facts or the request (you may use slots like {sim_1.lowest_cash_after}), keep it conversational, keep what was right.
@@ -140,6 +147,7 @@ Workflows:
 - opportunity: where can we save / what should we look at
 - health: how are we doing / explain our score or vitals
 - briefing: what's coming up / outlook for the next weeks / bills due
+- advisor: review my accounts / what should I do with my money / overall advice on cards, loans and savings
 When the latest message points back ("that budget", "that one", "something cheaper", "yes, show me"), resolve it from the coach's most recent answer and follow-up question, not from the member's first message. Example: if the coach last suggested "a pre-owned Datejust around $8,000-$10,000" and the member says "yeah show me something around that budget", the request is "Find a Rolex around $8,000-$10,000 and check how it fits the household".
 If the member asks for links, sources or where to buy, keep the workflow of the current topic and add "include sources" to the request.
 Before routing, decide whether you know enough to give a confident, specific answer. A good coach asks first when a plan has many open choices. Ask (needs_clarification true) when key details are missing and can't be looked up:

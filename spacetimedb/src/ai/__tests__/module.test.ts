@@ -275,3 +275,18 @@ describe('agent plans become real proposals', () => {
     expect(sc.status).not.toBe('draft');
   });
 });
+
+describe('approval rules', () => {
+  it("a co-owner's proposal counts as their approval and waits only for the other co-owner", () => {
+    (mod.askTwin as any)(reducerCtx(PRIYA), { question: 'Can we afford a $3,200 Japan trip in March?' });
+    runJobs(scripted([
+      () => toolCall('simulate_scenario', { title: 'Japan trip in March', levers: [{ kind: 'one_time', amount: 3200, date: '2027-03-01', label: 'Japan trip' }] }),
+      () => final({ title: 'Japan trip', verdict: 'yes', answer: 'Yes, comfortably.', tradeoffs: [], recommended_sim: 'sim_1' }),
+    ]));
+    const id = BigInt(JSON.parse(store.rows('aiInsight')[0].resultJson).scenarios[0].scenarioId);
+    (mod.proposeAgentPlan as any)(reducerCtx(PRIYA), { scenarioId: id });
+    const approvals = store.rows('approval').filter((a: any) => a.scenarioId === id);
+    expect(approvals.map((a: any) => [a.personId, a.decision])).toEqual([[PRIYA, 'approve']]);
+    expect(store.rows('scenario').find((x: any) => x.id === id).status).toBe('proposed'); // waits for Sam
+  });
+});

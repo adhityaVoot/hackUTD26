@@ -344,6 +344,19 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
     case 'debate':
       c.errors.push('internal: coach must be routed before running');
       break;
+    case 'advisor': {
+      const actions = (Array.isArray(parsed.actions) ? parsed.actions : []).slice(0, 3).map((x: any, i: number) => {
+        const sim = c.sim(`actions[${i}].sim_id`, x?.sim_id);
+        return { sim, title: sim?.title ?? (typeof x?.title === 'string' ? x.title.slice(0, 80) : `Move ${i + 1}`), label: typeof x?.title === 'string' ? x.title.slice(0, 80) : '', why: c.text(`actions[${i}].why`, x?.why, true, 300) };
+      });
+      if (!actions.length) c.errors.push('recommend at least one move, each citing a sim_id from simulate_scenario or observations.candidate_moves');
+      const valid = actions.filter((a: any) => a.sim);
+      r.scenarios = valid.map((a: any) => draft(a.sim)).filter((d: ScenarioDraft, i: number, arr: ScenarioDraft[]) => arr.findIndex(x => x.simId === d.simId) === i);
+      r.highlights = state.baseline.vitals.map(v => ({ label: VITAL_LABEL[v.key], value: v.display, direction: v.band === 'green' ? 'better' : v.band === 'red' ? 'worse' : 'neutral' }));
+      r.sections.push({ heading: 'Recommended moves', items: valid.map((a: any) => `${a.label || a.title}: ${a.why}`) });
+      r.extra = { actions: valid.map((a: any) => ({ simId: a.sim.simId, title: a.label || a.title, why: a.why, diff: diffView(a.sim) })), vitals: state.baseline.vitals };
+      break;
+    }
     case 'opportunity': {
       const opps = getOpportunities(state);
       const picks = (Array.isArray(parsed.picks) ? parsed.picks : []).slice(0, 3).map((p: any, i: number) => {
@@ -375,7 +388,7 @@ function publicOpp(o: ReturnType<typeof getOpportunities>[number]) {
 }
 
 function defaultTitle(f: FeatureKind): string {
-  return { twin: 'Your question', ripple: 'Ripple effect', negotiation: 'A middle path', stress: 'Stress test', life_event: 'Life event plan', memory: 'From your decision log', opportunity: 'Opportunities', health: 'Your financial health', briefing: 'Household briefing', coach: 'Coach', clarify: 'A few questions first', debate: 'The debate' }[f];
+  return { twin: 'Your question', ripple: 'Ripple effect', negotiation: 'A middle path', stress: 'Stress test', life_event: 'Life event plan', memory: 'From your decision log', opportunity: 'Opportunities', health: 'Your financial health', briefing: 'Household briefing', coach: 'Coach', clarify: 'A few questions first', debate: 'The debate', advisor: 'Your account review' }[f];
 }
 
 function summaryLine(s: Sim): string {
@@ -585,6 +598,17 @@ export function fallback(state: AgentState, reason: string): InsightResult {
       return base(state, 'A few questions first', 'Tell me a bit more and I can work it out.', 'fallback');
     case 'debate':
       return base(state, 'The debate', 'The debate needs Nemotron; try again when the model is available.', 'fallback');
+    case 'advisor': {
+      const cands = healthCandidates(state).slice(0, 3);
+      const score = state.baseline.vitals.find(v => v.key === 'score')!;
+      const weakest = [...state.baseline.vitals.filter(v => v.key !== 'score')].sort((a, b) => bandRank(b.band) - bandRank(a.band))[0];
+      const r = base(state, 'Your account review', `Your household score is ${score.display}. The area that needs the most attention is ${VITAL_LABEL[weakest.key].toLowerCase()} (${weakest.display}).${cands.length ? ' Here are the moves that help most; send any of them for approval with one tap.' : ''}`, 'fallback');
+      r.scenarios = cands.map(draft);
+      r.highlights = state.baseline.vitals.map(v => ({ label: VITAL_LABEL[v.key], value: v.display, direction: v.band === 'green' ? 'better' : v.band === 'red' ? 'worse' : 'neutral' }));
+      r.sections.push({ heading: 'Recommended moves', items: cands.map(c => `${c.title}: ${summaryLine(c)}`) });
+      r.extra = { actions: cands.map(c => ({ simId: c.simId, title: c.title, why: summaryLine(c), diff: diffView(c) })), vitals: state.baseline.vitals, reason };
+      return r;
+    }
     case 'coach':
       return base(state, 'Coach', 'I could not work out what to look at. Try asking about a purchase, an emergency, or your vitals.', 'fallback');
     case 'opportunity': {
@@ -677,6 +701,11 @@ export function healthCandidates(state: AgentState): Sim[] {
   if (trims.length) {
     const s = runSim(state, 'Trim flexible spending by a quarter', trims).sim;
     if (s) out.push(s);
+  }
+  // Idle cash and bill-timing fixes from the Opportunity Radar, as ready-to-approve moves.
+  for (const o of getOpportunities(state).filter(x => (x.type === 'idle_cash' || x.type === 'bill_timing') && x.lever).slice(0, 2)) {
+    const s2 = runSim(state, o.title, [o.lever!]).sim;
+    if (s2) out.push(s2);
   }
   const sub = getOpportunities(state).find(o => o.type === 'subscription_increase');
   if (sub) {

@@ -230,6 +230,7 @@ const FEATURE_TOOLS: Record<FeatureKind, string[]> = {
   coach: [],
   clarify: [],
   debate: [],
+  advisor: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'find_opportunities', 'spending_budget', 'simulate_scenario', 'check_bank'],
 };
 
 export function toolsFor(feature: FeatureKind): ToolSpec[] {

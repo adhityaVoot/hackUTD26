@@ -17,7 +17,8 @@ export type FeatureKind =
   | 'briefing' // Proactive: forecast + obligations + risks, run on a schedule; Sentinel mode proposes a fix
   | 'coach' // Conversational coach: Nemotron routes the message to one of the features above
   | 'clarify' // The coach needs more detail before it can answer confidently: it asks questions instead
-  | 'debate'; // Advocate and Skeptic agents argue a decision from the simulation; a Judge decides
+  | 'debate' // Advocate and Skeptic agents argue a decision from the simulation; a Judge decides
+  | 'advisor'; // Account review: overall advice on every account, card, loan and goal, with ready-to-approve moves
 
 export const FEATURE_KINDS: FeatureKind[] = [
   'twin',
@@ -33,7 +34,7 @@ export const FEATURE_KINDS: FeatureKind[] = [
 ];
 
 /** Features the coach can route a message to. */
-export const ROUTABLE: FeatureKind[] = ['twin', 'ripple', 'stress', 'life_event', 'memory', 'opportunity', 'health', 'briefing'];
+export const ROUTABLE: FeatureKind[] = ['twin', 'ripple', 'stress', 'life_event', 'memory', 'opportunity', 'health', 'briefing', 'advisor'];
 
 export type Visibility = 'full' | 'summary' | 'signal';
 

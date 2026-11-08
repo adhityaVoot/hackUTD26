@@ -86,9 +86,10 @@ function ProposeButtons({result}){
   const plans=(result?.scenarios||[]).filter(x=>x.proposable&&x.scenarioId);
   if(!plans.length||!s.capabilities?.propose_agent_plan)return null;
   const statusOf=id=>(s.householdScenarios||[]).find(x=>String(x.id)===String(id))?.status;
-  return <div className="lab-propose">{plans.slice(0,2).map(p=>{const st=statusOf(p.scenarioId);const done=sent[p.scenarioId]||(st&&st!=='draft');
-    return <button key={p.scenarioId} className="lab-propose-btn" disabled={!!done||busy===p.scenarioId} onClick={async()=>{setBusy(p.scenarioId);try{await s.act('propose_agent_plan',{scenarioId:BigInt(p.scenarioId)});setSent(v=>({...v,[p.scenarioId]:true}))}catch{}finally{setBusy('')}}}>
-      <Users size={14}/>{done?`Sent for co-sign: ${p.title}`:busy===p.scenarioId?'Sending…':`Propose "${p.title}" to the family`}</button>})}</div>;
+  const label=(p,st,done)=>st==='merged'?`Applied: ${p.title} (no approval needed)`:st==='proposed'||done?`Sent for approval: ${p.title}`:`Send "${p.title}" for approval`;
+  return <div className="lab-propose">{plans.slice(0,3).map(p=>{const st=statusOf(p.scenarioId);const done=sent[p.scenarioId]||(st&&st!=='draft');
+    return <button key={p.scenarioId} className={'lab-propose-btn'+(st==='merged'?' applied':'')} disabled={!!done||busy===p.scenarioId} onClick={async()=>{setBusy(p.scenarioId);try{await s.act('propose_agent_plan',{scenarioId:BigInt(p.scenarioId)});setSent(v=>({...v,[p.scenarioId]:true}))}catch{}finally{setBusy('')}}}>
+      {st==='merged'?<CheckCircle2 size={14}/>:<Users size={14}/>}{busy===p.scenarioId?'Sending…':label(p,st,done)}</button>})}</div>;
 }
 
 /** One answer, rendered for what it is: a chat reply, a debate, a stress test, vitals, savings... */
@@ -103,12 +104,13 @@ function Reply({row}){
     {r.followUp&&<p className="lab-follow">{r.followUp}</p>}
     {kind==='debate'&&extra.debate&&<div className="lab-debate"><div className="lab-side pro"><h5><ThumbsUp size={14}/>Advocate</h5><ul>{extra.debate.for.map((p,i)=><li key={i}>{p}</li>)}</ul></div><div className="lab-side con"><h5><ThumbsDown size={14}/>Skeptic</h5><ul>{extra.debate.against.map((p,i)=><li key={i}>{p}</li>)}</ul></div><div className={'lab-verdict '+extra.debate.verdict}><Gavel size={15}/>Judge: <strong>{({go:'Go ahead',wait:'Wait or scale it down',skip:'Skip it'})[extra.debate.verdict]}</strong></div></div>}
     <ScenarioChart result={r} height={kind==='coach'||kind==='twin'?170:220}/>
-    {kind!=='coach'&&kind!=='twin'&&Array.isArray(r.highlights)&&r.highlights.length>0&&<div className="lab-highlights">{r.highlights.map((h,i)=><span key={i} className={'lab-chip '+(h.direction||'neutral')}><b>{h.label}</b>{h.value?` ${h.value}`:` ${h.before??''} → ${h.after??''}`}</span>)}</div>}
-    {kind==='health'&&Array.isArray(extra.vitals)&&<div className="lab-vitals">{extra.vitals.filter(v=>v.key!=='score').map(v=><div key={v.key} className={'lab-vital '+v.band}><span>{VITAL_NAMES[v.key]||v.key}</span><strong>{v.display}</strong><small>{v.band}</small></div>)}</div>}
+    {!['coach','twin','health','advisor'].includes(kind)&&Array.isArray(r.highlights)&&r.highlights.length>0&&<div className="lab-highlights">{r.highlights.map((h,i)=><span key={i} className={'lab-chip '+(h.direction||'neutral')}><b>{h.label}</b>{h.value?` ${h.value}`:` ${h.before??''} → ${h.after??''}`}</span>)}</div>}
+    {kind==='advisor'&&Array.isArray(extra.actions)&&extra.actions.length>0&&<ol className="lab-actions">{extra.actions.map((a,i)=><li key={a.simId||i}><strong>{a.title}</strong><span>{a.why}</span></li>)}</ol>}
+    {(kind==='health'||kind==='advisor')&&Array.isArray(extra.vitals)&&<div className="lab-vitals">{extra.vitals.filter(v=>v.key!=='score').map(v=><div key={v.key} className={'lab-vital '+v.band}><span>{VITAL_NAMES[v.key]||v.key}</span><strong>{v.display}</strong><small>{v.band}</small></div>)}</div>}
     {kind==='ripple'&&Array.isArray(extra.chain||extra.engineChain)&&<ol className="lab-chain">{(extra.chain?.length?extra.chain:extra.engineChain).map((c,i)=><li key={i} className={c.severity}><span>{c.step}</span></li>)}</ol>}
     {kind==='opportunity'&&Array.isArray(extra.picks)&&<div className="lab-opps">{extra.picks.map(p=><div key={p.opportunity} className="lab-opp"><strong>{p.title}</strong>{p.estMonthlySavings>0&&<span className="lab-save">{usd(p.estMonthlySavings)}/mo</span>}{p.why&&<p>{p.why}</p>}<small>{p.free?'Free to do':'Costs cash now'} · {p.scope}</small></div>)}</div>}
     {kind==='life_event'&&Array.isArray(extra.assumptions)&&<table className="lab-table"><thead><tr><th>Assumption</th><th>Amount</th><th>When</th></tr></thead><tbody>{extra.assumptions.map((a,i)=><tr key={i}><td>{a.label}</td><td>{usd(a.amount)}</td><td>{a.timing}</td></tr>)}</tbody></table>}
-    {kind!=='coach'&&kind!=='twin'&&kind!=='clarify'&&(r.sections||[]).filter(sec=>!(kind==='ripple'&&/chain/i.test(sec.heading))&&!(kind==='health'&&/vitals/i.test(sec.heading))&&!(kind==='life_event'&&/assumptions/i.test(sec.heading))).map(sec=><div key={sec.heading} className="lab-section"><h5><ListChecks size={14}/>{sec.heading}</h5><ul>{sec.items.map((it,i)=><li key={i}>{it}</li>)}</ul></div>)}
+    {kind!=='coach'&&kind!=='twin'&&kind!=='clarify'&&(r.sections||[]).filter(sec=>!(kind==='ripple'&&/chain/i.test(sec.heading))&&!(kind==='health'&&/vitals/i.test(sec.heading))&&!(kind==='advisor'&&/moves/i.test(sec.heading))&&!(kind==='life_event'&&/assumptions/i.test(sec.heading))).map(sec=><div key={sec.heading} className="lab-section"><h5><ListChecks size={14}/>{sec.heading}</h5><ul>{sec.items.map((it,i)=><li key={i}>{it}</li>)}</ul></div>)}
     {Array.isArray(r.sources)&&r.sources.length>0&&<p className="lab-sources">Sources: {r.sources.map((x,i)=><React.Fragment key={x.url}>{i>0&&' · '}<a href={x.url} target="_blank" rel="noreferrer noopener">{x.title}</a></React.Fragment>)}</p>}
     <ProposeButtons result={r}/>
     {r.source==='fallback'&&<small className="lab-meta">Rule-based answer (Nemotron was unavailable). The numbers still come from the engine.</small>}
@@ -173,14 +175,15 @@ export function NemotronTool({mode='stress',placeholder}){
 export function AccountInsights(){
   const s=useHousehold();
   const [since]=useState(()=>topId(s)),[busy,setBusy]=useState('');
-  const kinds=new Set(QUICK.map(q=>q.key));
+  const kinds=new Set([...QUICK.map(q=>q.key),'advisor']);
   const all=(s.myAiInsights||[]).filter(r=>kinds.has(r.kind)&&visible(r)).slice().sort((a,b)=>Number(a.id)-Number(b.id));
   const fresh=all.filter(r=>Number(r.id)>since);const latest=fresh[fresh.length-1];
   const lastRef=useFollowNewest(latest?[latest]:[]);
   async function run(q){setBusy(q.key);try{await s.act(q.op,{})}catch{}finally{setBusy('')}}
   return <section className="simple-card account-insights">
     <div className="simple-section-heading"><h2>Account insights</h2><span className="simple-demo-badge">NEMOTRON</span></div>
-    <p className="simple-muted">One tap: Nemotron reads your accounts and bills, runs the numbers, and explains what matters.</p>
+    <p className="simple-muted">Nemotron reads every account, card, loan and bill, runs the numbers, and tells you what to do. Recommended moves are ready to send for approval in one tap.</p>
+    <button className="workspace-button review-accounts" onClick={()=>run({key:'advisor',op:'request_account_review'})} disabled={!!busy||!s.capabilities?.request_account_review}><Wand2 size={16}/>{busy==='advisor'?'Reviewing your accounts…':'Review my accounts'}</button>
     <div className="studio-modes">{QUICK.map(q=><button key={q.key} onClick={()=>run(q)} disabled={!!busy||!s.capabilities?.[q.op]}><q.Icon size={15}/>{busy===q.key?'Working…':q.label}</button>)}</div>
     {latest&&<div ref={lastRef}><Reply row={latest}/></div>}
     <History rows={all.filter(r=>r!==latest)} label="Past insights"/>

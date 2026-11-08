@@ -555,3 +555,19 @@ describe('decisions beyond the 60-day window', () => {
     expect(later.lowest_cash_12_months_after).toBeLessThan(later.lowest_cash_12_months_before);
   });
 });
+
+describe('Account review (advisor)', () => {
+  it('reviews every account and turns each recommended move into a simulated plan', () => {
+    const http = fakeHttp([() => ({ body: final({ title: 'Your accounts', answer: 'Cash is healthy, but the card costs you interest.', actions: [{ sim_id: 'sim_1', title: 'Pay down the card', why: 'It saves interest every month.' }], follow_up: 'Want me to send that for approval?' }) })]);
+    const out = runAgent(state('advisor', 'Review my accounts'), { http, primary: cfg, secondary: null, skipReview: true });
+    expect(out.status).toBe('done');
+    expect(out.result.scenarios.length).toBe(1);
+    expect((out.result.extra!.actions as any[])[0]).toMatchObject({ simId: 'sim_1', title: 'Pay down the card' });
+    expect(JSON.parse(http.sent[0].messages[1].content).observations.candidate_moves.length).toBeGreaterThanOrEqual(2);
+  });
+  it('works without the model too', () => {
+    const out = runAgent(state('advisor', 'Review my accounts'), { http: fakeHttp([]), primary: null, secondary: null });
+    expect(out.result.answer).toMatch(/household score is/);
+    expect(out.result.scenarios.length).toBeGreaterThan(0);
+  });
+});
