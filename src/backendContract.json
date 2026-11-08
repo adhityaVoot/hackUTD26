@@ -151,17 +151,6 @@
       "accountId",
       "allowed"
     ],
-    "open_negotiation": [
-      "topic"
-    ],
-    "submit_position": [
-      "negotiationId",
-      "want",
-      "priority"
-    ],
-    "request_mediation": [
-      "negotiationId"
-    ],
     "stress_test": [
       "scenario"
     ],
@@ -179,6 +168,34 @@
     ],
     "propose_agent_plan": [
       "scenarioId"
+    ],
+    "rename_account": [
+      "accountId",
+      "nickname"
+    ],
+    "join_household_with_pin": [
+      "inviteCode",
+      "name",
+      "pin",
+      "createPin"
+    ],
+    "invite_family_member": [
+      "email",
+      "displayName",
+      "role"
+    ],
+    "accept_family_invitation": [
+      "invitationId",
+      "pin"
+    ],
+    "decline_family_invitation": [
+      "invitationId"
+    ],
+    "revoke_family_invitation": [
+      "invitationId"
+    ],
+    "resend_family_invitation": [
+      "invitationId"
     ]
   },
   "views": [
@@ -205,6 +222,9 @@
     "myVitals",
     "scenarioChanges",
     "myMoneyRequests",
-    "myAccountPrivacy"
+    "myAccountPrivacy",
+    "myInvitationSettings",
+    "householdInvitations",
+    "myFamilyInvitations"
   ]
 }

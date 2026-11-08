@@ -1,3 +1,5 @@
+import {authenticatedEmail,householdAccess,personIdentity,familyInvitation,invitationEmailJob,registerInvitations,recordAuthenticatedEmail} from './familyInvitations';
+import {renameAccount as renameAccountRow} from './life';
 import {ageProfile,accountPrivacy,isMinor,setBirthDate,setOwnerAccess} from './accountPrivacy';
 import {simDayToIso} from './engine/calendar';
 import { moneyRequest, createMoneyRequest as createMoneyRequestRow, respondMoneyRequest as respondMoneyRequestRow } from './moneyRequests';
@@ -99,6 +101,11 @@ import {
 const spacetimedb = schema(
   {
     household,
+    authenticatedEmail,
+    householdAccess,
+    personIdentity,
+    familyInvitation,
+    invitationEmailJob,
     moneyRequest,
     ageProfile,
     accountPrivacy,
@@ -151,6 +158,10 @@ const spacetimedb = schema(
       NESSIE_DEMO_CUSTOMERS: t.string().optional(),
       NESSIE_API_KEY: t.string().optional(),
       NESSIE_BASE_URL: t.string().optional(),
+      AUTH_CLIENT_ID:t.string().optional(),
+      RESEND_API_KEY:t.string().optional(),
+      INVITE_FROM_EMAIL:t.string().optional(),
+      APP_PUBLIC_URL:t.string().optional(),
       ADMIN_CODE: t.string().optional(),
     },
   },
@@ -176,6 +187,7 @@ export const init = spacetimedb.init(ctx => {
 });
 
 export const onConnect = spacetimedb.clientConnected(ctx => {
+  recordAuthenticatedEmail(ctx);
   updateMemberPresence(ctx, true);
 });
 
@@ -345,6 +357,7 @@ export const joinHousehold = spacetimedb.reducer(
     }
     const household = ctx.db.household.inviteCode.find(code);
     if (!household) throw new SenderError('Invite code is not valid');
+    if(ctx.db.householdAccess.householdId.find(household.id)?.invitationOnly)throw new SenderError('This household requires an email invitation. Sign in with your invited email and accept it.');
     let person = undefined;
     for (const row of ctx.db.person.householdId.filter(household.id)) {
       const listedName = row.displayName.toLowerCase();
@@ -735,3 +748,23 @@ export const adminSetDemoBirthDates=spacetimedb.reducer({adminCode:t.string(),in
  const d=new Date(args.birthDate+'T00:00:00Z');if(!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==args.birthDate||args.birthDate>simDayToIso(h.simDay))throw new SenderError('Invalid demo birth date');
  for(const p of ctx.db.person.householdId.filter(h.id)){const row={personId:p.id,householdId:h.id,birthDate:args.birthDate};if(ctx.db.ageProfile.personId.find(p.id))ctx.db.ageProfile.personId.update(row);else ctx.db.ageProfile.insert(row);}
 });
+
+export const renameAccount=spacetimedb.reducer({accountId:t.u64(),nickname:t.string()},(ctx,args)=>renameAccountRow(ctx,args.accountId,args.nickname));
+
+/** Verify household PIN before claiming membership; invalid attempts never join. */
+export const joinHouseholdWithPin=spacetimedb.reducer({inviteCode:t.string(),name:t.string(),pin:t.string(),createPin:t.bool()},(ctx,args)=>{
+ const household=ctx.db.household.inviteCode.find(args.inviteCode.trim().toUpperCase());
+ const needle=args.name.trim().toLowerCase();
+ const person=household?[...ctx.db.person.householdId.filter(household.id)].find(p=>p.displayName.toLowerCase()===needle||p.personaKey.toLowerCase()===needle):undefined;
+ if(!person||!household||!/^\d{4}$/.test(args.pin))throw new SenderError('Check your name, invitation code, and four-digit PIN');
+ const digest=demoPinDigest(person.id,args.pin);
+ if(person.pinHash&&person.pinHash!==digest)throw new SenderError('Check your name, invitation code, and PIN');
+ if(!person.pinHash&&!args.createPin)throw new SenderError('No PIN is set. Select First visit to create your PIN');
+ joinHousehold(ctx,{inviteCode:household.inviteCode,name:person.personaKey});
+ if(!person.pinHash)ctx.db.person.id.update({...person,pinHash:digest});
+ const member=ctx.db.member.identity.find(ctx.sender)!;
+ ctx.db.member.identity.update({...member,stepUpAt:ctx.timestamp,pinFailCount:0,pinLockedUntilMicros:0n});
+});
+
+export const {inviteFamily:inviteFamilyMember,acceptFamily:acceptFamilyInvitation,declineFamily:declineFamilyInvitation,revokeFamily:revokeFamilyInvitation,resendFamily:resendFamilyInvitation,invitationSettings:myInvitationSettings,outgoing:householdInvitations,inbox:myFamilyInvitations,sendEmail:sendFamilyInvitationEmail}=registerInvitations(spacetimedb);
+export const registerAuthenticatedEmail=spacetimedb.reducer(ctx=>recordAuthenticatedEmail(ctx));

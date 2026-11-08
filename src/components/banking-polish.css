@@ -1,0 +1,247 @@
+/* Tandem banking shell. Scoped to the dashboard; card-entry experience is preserved. */
+.space-page.simplified-bank{
+ --bank-blue:#005b96;--bank-navy:#12354a;--bank-orange:#ed8b23;--bank-text:#183b50;--bank-muted:#597180;--bank-border:#dce5eb;
+ background:#f4f7f9;color:var(--bank-text);min-height:100vh;padding-bottom:48px;
+ font-family:"FF DIN",Arial,sans-serif;font-size:15px;line-height:1.5;
+}
+.space-page.simplified-bank :is(button,input,select,textarea){font-family:"FF DIN",Arial,sans-serif}
+.space-page.simplified-bank :is(h1,h2,h3,h4){color:var(--bank-navy);text-transform:none;letter-spacing:-.025em;line-height:1.2}
+.space-page.simplified-bank :is(h1,h2){font-family:"Rotis Semi Serif",Georgia,serif;font-weight:400}
+.space-page.simplified-bank :is(button,a,input,select,textarea):focus-visible{outline:3px solid #197cb8;outline-offset:4px}
+.space-page.simplified-bank .banking-masthead{background:#005b96;border-bottom:0;padding-inline:32px;box-shadow:0 2px 8px #1139510b}
+.space-page.simplified-bank .simple-bank-header{max-width:1240px;min-height:88px;gap:30px}
+.space-page.simplified-bank .simple-bank-header .wordmark{font-size:31px;letter-spacing:-1px;color:#fff}
+.space-page.simplified-bank .simple-bank-header .logo-icon{height:38px;width:38px;border-radius:9px;background:#f5a23b;color:#083f63;font-size:29px;box-shadow:inset 0 0 0 1px #ffffff33}
+.space-page.simplified-bank .header-menu>summary{font-size:14px;color:#fff;min-height:44px}
+.space-page.simplified-bank .header-household>summary{border-color:#ffffff40;padding:10px 16px;border-radius:7px;background:#ffffff0b}
+.space-page.simplified-bank .simple-profile-avatar{width:36px;height:36px;background:#eef5f9;color:#005b96;font-size:14px;font-weight:700}
+.space-page.simplified-bank .simple-header-actions{gap:22px}
+.space-page.simplified-bank .header-dropdown{border-radius:12px;padding:22px;box-shadow:0 15px 45px #12354a26}
+.space-page.simplified-bank .header-dropdown :is(p,small){font-size:13px;color:#597180;line-height:1.5}
+.space-page.simplified-bank .header-dropdown :is(a,button){font-size:14px;color:#204d67;padding:12px}
+.space-page.simplified-bank .profile-intro strong{font-size:17px;color:#153e56}
+.space-page.simplified-bank .bank-navigation{max-width:1240px;margin:0 auto;gap:0;background:white;border:0;border-radius:0;box-shadow:none}
+.space-page.simplified-bank .bank-tab{border:0!important;border-bottom:3px solid transparent!important;border-radius:0!important;background:white!important;color:#527082!important;padding:18px 24px!important;font-size:15px!important;letter-spacing:0;text-transform:none;font-weight:500;gap:10px}
+.space-page.simplified-bank .bank-tab:hover{background:#f1f7fb!important;color:#005b96!important}
+.space-page.simplified-bank .bank-tab.bank-tab-active{color:#005b96!important;border-bottom-color:#ed8b23!important;font-weight:700}
+.space-page.simplified-bank .bank-tab>svg{height:19px;width:19px;color:currentColor}
+.space-page.simplified-bank .simple-main.space-panel{max-width:1240px;margin:36px auto 0;padding:0 0 24px}
+.space-page.simplified-bank .simple-page-title{margin-bottom:30px;align-items:flex-end}
+.space-page.simplified-bank .simple-page-title h1{font-size:42px;letter-spacing:-1px;margin:6px 0 10px}
+.space-page.simplified-bank .simple-page-title .eyebrow{color:#5b7484;font-size:11px;letter-spacing:1.7px;font-weight:700}
+.space-page.simplified-bank .simple-page-title .panel-intro{font-size:15px;color:#597180;line-height:1.6;max-width:660px}
+.space-page.simplified-bank .simple-connection{font-size:12px;color:#496a60;background:#eaf3ee;border:1px solid #d4e5d9;padding:7px 12px;border-radius:20px}
+.space-page.simplified-bank .simple-connection i{width:7px;height:7px;background:#6d8490}
+.space-page.simplified-bank .simple-connection.online i{background:#25845a}
+.space-page.simplified-bank :is(.simple-card,.workspace-card,.simple-request-card,.simple-health){background:white;border:1px solid var(--bank-border);border-radius:12px;box-shadow:0 3px 12px #173b5305;padding:28px;color:var(--bank-text)}
+.space-page.simplified-bank :is(.simple-card,.workspace-card){margin-bottom:24px}
+.space-page.simplified-bank :is(.simple-card h2,.workspace-card h3){font-size:24px;margin-bottom:16px}
+.space-page.simplified-bank :is(.workspace-copy,.simple-muted,.simple-card>p,.simple-empty p){color:var(--bank-muted);font-size:14px;line-height:1.65}
+.space-page.simplified-bank :is(.workspace-small,.simple-card small,.workspace-card small){font-size:12px;line-height:1.55;color:#607887}
+.space-page.simplified-bank .simple-section-heading{margin:30px 0 18px;gap:16px}
+.space-page.simplified-bank .simple-section-heading h2{font-size:27px;margin:0}
+.space-page.simplified-bank .simple-section-heading a{color:#005b96;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0}
+.space-page.simplified-bank .overview-highlight{display:grid;grid-template-columns:1.3fr 1fr;gap:0;border:1px solid #d7e3eb;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 5px 24px #173b5308}
+.space-page.simplified-bank .overview-highlight>div:first-child{position:relative;padding:36px 40px;background:#005b96;color:white;overflow:hidden;border:0}
+.space-page.simplified-bank .overview-highlight>div:first-child:after{content:"";position:absolute;width:270px;height:270px;border:40px solid #ffffff08;border-radius:50%;right:-90px;top:-90px;pointer-events:none}
+.space-page.simplified-bank .overview-highlight>div>span{display:block;font-size:11px;font-weight:700;letter-spacing:1.8px;color:#d9eaf4}
+.space-page.simplified-bank .overview-highlight>div:first-child>strong{display:block;font-family:"FF DIN",Arial,sans-serif;font-size:58px;font-weight:500;letter-spacing:-2px;color:#fff;line-height:1.15;margin:20px 0 12px;font-variant-numeric:tabular-nums}
+.space-page.simplified-bank .overview-highlight p{font-size:14px;line-height:1.6;color:#d7e9f5;max-width:410px;margin:0 0 24px}
+.space-page.simplified-bank .overview-highlight a{display:inline-flex;align-items:center;gap:12px;border:0;border-radius:6px;padding:11px 16px;color:#005b96;background:white;font-size:13px;font-weight:700;letter-spacing:0;text-transform:none;text-decoration:none;min-height:44px}
+.space-page.simplified-bank .overview-highlight .overview-next{padding:36px 38px;background:#fff;border:0;border-top:4px solid #ed8b23}
+.space-page.simplified-bank .overview-next>span{color:#826139!important}
+.space-page.simplified-bank .overview-next h3{font-family:"Rotis Semi Serif",Georgia,serif;font-size:30px;font-weight:400;margin:18px 0 14px;max-width:340px}
+.space-page.simplified-bank .overview-next p{color:#597180}
+.space-page.simplified-bank .overview-next a{background:#eef5fa;color:#005b96}
+.space-page.simplified-bank .bank-quick-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:22px 0 32px}
+.space-page.simplified-bank .bank-quick-actions a{display:flex;align-items:center;gap:14px;min-height:76px;padding:16px 20px;border:1px solid #dce5eb;border-radius:10px;background:#fff;color:#234a61;text-decoration:none;font-size:14px;font-weight:500;transition:box-shadow .15s,border-color .15s}
+.space-page.simplified-bank .bank-quick-actions a:hover{border-color:#7fadc9;box-shadow:0 4px 12px #005b960b}
+.space-page.simplified-bank .bank-quick-actions a>svg:first-child{color:#005b96;background:#edf5fa;box-sizing:content-box;padding:9px;border-radius:8px}
+.space-page.simplified-bank .bank-quick-actions a>svg:last-child{margin-left:auto;color:#688393}
+.space-page.simplified-bank .simple-health-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-bottom:32px}
+.space-page.simplified-bank .simple-health{padding:26px;border-top:3px solid #d5e1e9;display:flex;align-items:flex-start;flex-direction:column;min-width:0}
+.space-page.simplified-bank .simple-health.green{border-top-color:#29825c}.space-page.simplified-bank .simple-health.yellow{border-top-color:#c38a22}.space-page.simplified-bank .simple-health.red{border-top-color:#b85248}
+.space-page.simplified-bank .simple-health>span{font-size:14px;font-weight:500;color:#49677a;letter-spacing:0;text-transform:none}
+.space-page.simplified-bank .simple-health>strong{font-size:36px;font-family:"FF DIN",Arial,sans-serif;font-weight:500;letter-spacing:-1px;line-height:1.25;color:#173f58;margin:18px 0 12px;font-variant-numeric:tabular-nums}
+.space-page.simplified-bank .simple-health>small{border-radius:20px;font-size:11px;font-weight:500;padding:4px 10px;background:#f0f4f7;color:#597180}
+.space-page.simplified-bank .simple-health.green>small{color:#216747;background:#eaf5ee}.space-page.simplified-bank .simple-health.yellow>small{color:#855e16;background:#fff5de}.space-page.simplified-bank .simple-health.red>small{color:#9c3930;background:#fcefed}
+.space-page.simplified-bank .simple-health p{font-size:13px;line-height:1.6;color:#5a7282;margin:15px 0 20px}
+.space-page.simplified-bank .vital-math-button{margin-top:auto;font-size:12px;color:#005b96;border-top-color:#e6edf1;padding-top:14px}
+.space-page.simplified-bank :is(.workspace-button,.simple-link-button,.planning-start form button){display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;border-radius:6px;padding:11px 18px;font-size:14px;font-weight:500;letter-spacing:0;text-transform:none;background:#005b96;color:#fff;border:1px solid #005b96;box-shadow:none}
+.space-page.simplified-bank :is(.workspace-button,.simple-link-button,.planning-start form button):hover{background:#004979;border-color:#004979}
+.space-page.simplified-bank .workspace-button.secondary{background:#fff;color:#005b96;border-color:#bdd0dd}
+.space-page.simplified-bank .workspace-button.secondary:hover{background:#eef5fa}
+.space-page.simplified-bank .workspace-button.destructive{background:#fff;color:#a83f36;border-color:#e5c4c0}
+.space-page.simplified-bank button:disabled{opacity:.5;cursor:not-allowed}
+.space-page.simplified-bank :is(.workspace-field>span,.workspace-form>label,.planning-start label,.live-purchase-form>label){font-size:13px;color:#365a70;font-weight:500;line-height:1.5}
+.space-page.simplified-bank :is(input,select,textarea){color:#1c3d52;background:white;border:1px solid #b9ccd9;border-radius:6px;font-size:15px;min-height:46px;padding:11px 13px;box-shadow:none;line-height:1.5;max-width:100%}
+.space-page.simplified-bank :is(input,textarea)::placeholder{color:#7a8e9a}
+.space-page.simplified-bank textarea{min-height:100px;resize:vertical}
+.space-page.simplified-bank .workspace-form{gap:18px}
+.space-page.simplified-bank .planning-start{padding:30px;border-left:4px solid #ed8b23}
+.space-page.simplified-bank .simple-eyebrow{font-size:11px;color:#597180;letter-spacing:1.5px;font-weight:700}
+.space-page.simplified-bank .bank-ui-tablist{background:transparent;border:0;border-bottom:1px solid #dce5eb;border-radius:0;padding:0;gap:22px;margin:0 0 26px;box-shadow:none;overflow-x:auto}
+.space-page.simplified-bank .bank-ui-tab{background:transparent;border:0;border-radius:0;border-bottom:3px solid transparent;padding:16px 2px;color:#5d7585;min-height:56px;font-size:14px;gap:10px;box-shadow:none;white-space:nowrap;flex:none}
+.space-page.simplified-bank .bank-ui-tab[data-state=active]{background:transparent;color:#005b96;border-bottom-color:#ed8b23;box-shadow:none}
+.space-page.simplified-bank .bank-ui-tab small{color:#657e8d;font-size:12px;margin-top:5px}
+.space-page.simplified-bank .simple-account-list{display:flex;flex-direction:column;gap:12px;background:transparent;border:0}
+.space-page.simplified-bank .simple-account-row{min-height:100px;padding:22px 24px;background:#fff;border:1px solid #dce5eb;border-radius:10px;gap:18px;box-shadow:0 2px 5px #12354a03;transition:border-color .15s,box-shadow .15s}
+.space-page.simplified-bank .simple-account-row:hover{background:#fff;border-color:#80adc7;box-shadow:0 4px 15px #005b960c}
+.space-page.simplified-bank :is(.account-row-icon,.bill-icon,.request-card-icon){width:44px;height:44px;display:grid;place-items:center;border-radius:10px;background:#ecf4fa;color:#005b96;border:1px solid #dceaf3;flex-shrink:0}
+.space-page.simplified-bank .simple-account-row strong{font-size:17px;font-weight:500;color:#1c425b}
+.space-page.simplified-bank .simple-account-row small{font-size:12px;color:#657c8c;margin-top:6px;line-height:1.5}
+.space-page.simplified-bank .simple-account-row>b{font-size:25px;font-weight:500;color:#143e58;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.space-page.simplified-bank .simple-account-title{padding:28px;background:white;border:1px solid #dce5eb;border-radius:12px;margin:18px 0 24px}
+.space-page.simplified-bank .simple-account-title strong{font-size:34px;color:#005b96;font-weight:500}
+.space-page.simplified-bank .simple-bill{padding:18px 0;gap:16px;border-bottom:1px solid #e8eef2}
+.space-page.simplified-bank .simple-bill:last-child{border-bottom:0}
+.space-page.simplified-bank .simple-bill strong{font-size:15px;font-weight:500;color:#23485f}
+.space-page.simplified-bank .simple-bill small{font-size:12px;color:#617c8c;margin-top:4px}
+.space-page.simplified-bank .simple-bill>b{font-size:18px;font-weight:500;font-variant-numeric:tabular-nums;color:#20465d}
+.space-page.simplified-bank .simple-request-card{gap:20px;align-items:center;padding:26px;margin-bottom:14px}
+.space-page.simplified-bank .simple-request-card h2{font-family:"FF DIN",Arial,sans-serif;font-size:21px;font-weight:500;margin:9px 0;color:#20465d}
+.space-page.simplified-bank .simple-request-card p{font-size:14px;color:#587282;line-height:1.6}
+.space-page.simplified-bank .simple-request-card>button{background:#eef5fa;color:#005b96;border:1px solid #d5e5ef;border-radius:6px;min-height:42px;padding:10px 16px;font-size:13px;font-weight:500}
+.space-page.simplified-bank .simple-status{display:inline-block;border:1px solid #dbe7ef;border-radius:20px;padding:4px 10px;background:#f1f6fa;font-size:10px!important;color:#43677f}
+.space-page.simplified-bank .simple-filter-pills{display:flex;gap:5px;padding:4px;background:#e9eff3;border-radius:8px}
+.space-page.simplified-bank .simple-filter-pills button{font-size:13px;padding:8px 16px;border:0;border-radius:5px;color:#587181;background:transparent;min-height:36px}
+.space-page.simplified-bank .simple-filter-pills button.selected{background:white;color:#005b96;box-shadow:0 1px 4px #1c425b12}
+.space-page.simplified-bank .simple-more{border:1px solid #dce5eb;background:white;border-radius:10px;margin:22px 0}
+.space-page.simplified-bank .simple-more>summary{font-size:14px;color:#234b64;font-weight:500;padding:18px 22px}
+.space-page.simplified-bank .simple-more-content{padding:0 22px 22px;border-top:1px solid #edf1f4}
+.space-page.simplified-bank :is(.workspace-impacts,.live-purchase-numbers){gap:12px;background:transparent;border:0}
+.space-page.simplified-bank :is(.workspace-impacts,.live-purchase-numbers)>div{background:#f4f8fb;border:1px solid #e0e9ef;border-radius:8px;padding:18px}
+.space-page.simplified-bank :is(.workspace-impacts,.live-purchase-numbers) strong{font-size:25px;color:#164666;font-weight:500;letter-spacing:-.5px}
+.space-page.simplified-bank :is(.risk-chart,.live-purchase-chart){background:#fff;border:1px solid #e6edf2;border-radius:8px;padding:12px 4px;margin-top:20px}
+.space-page.simplified-bank .risk-calendar{gap:7px}
+.space-page.simplified-bank .risk-calendar button{border:1px solid #dbe7df;border-radius:7px;padding:10px 5px;min-height:78px}
+.space-page.simplified-bank .risk-calendar button.low{background:#f0f7f2;color:#34604a}
+.space-page.simplified-bank .risk-calendar button.medium{background:#fff6e4;color:#886016;border-color:#efdfb8}
+.space-page.simplified-bank .risk-calendar button.high{background:#fdf0ed;color:#a34136;border-color:#efd4ce}
+.space-page.simplified-bank .risk-calendar button span{font-size:10px;font-weight:500}
+.space-page.simplified-bank .risk-calendar button strong{font-size:16px}
+.space-page.simplified-bank .risk-calendar button[aria-pressed=true]{outline:2px solid #005b96;outline-offset:2px}
+.space-page.simplified-bank .transaction-table{font-size:14px;background:white}
+.space-page.simplified-bank .transaction-table th{background:#f2f6f9;color:#526e80;font-size:11px;letter-spacing:.7px;font-weight:500;padding:15px 18px;border-bottom:1px solid #dce5eb}
+.space-page.simplified-bank .transaction-table td{padding:17px 18px;border-bottom:1px solid #e8eef2;color:#294e65;font-size:13px}
+.space-page.simplified-bank .transaction-table td small{display:block;font-size:11px;margin-top:5px;color:#718694}
+.space-page.simplified-bank .transaction-table tr:hover td{background:#f8fbfd}
+.space-page.simplified-bank .txn-credit{color:#26724e!important}.space-page.simplified-bank .txn-debit{color:#294e65!important}
+.space-page.simplified-bank .scenario-list>button{padding:15px 14px;border-radius:7px;color:#41647c;font-size:14px;margin:5px 0}
+.space-page.simplified-bank .scenario-list>button.selected{background:#edf5fa;border-color:#b6d1e1;color:#005b96}
+.space-page.simplified-bank .simple-empty{padding:48px 24px;background:#fff;border:1px dashed #cbdbe5;border-radius:12px;text-align:center}
+.space-page.simplified-bank .simple-empty h3{font-size:22px;font-family:"Rotis Semi Serif",Georgia,serif;margin:18px 0 8px}
+.space-page.simplified-bank .simple-demo-badge,.space-page.simplified-bank .live-data-tag{font-size:10px;color:#446b83;background:#edf5fa;border:1px solid #d7e6ef;border-radius:5px;padding:5px 8px;letter-spacing:.6px}
+.space-page.simplified-bank .panel-bottom{color:#6d8290;border-top:1px solid #dce5eb;padding-top:22px;margin-top:36px;font-size:12px;letter-spacing:0;text-transform:none}
+.space-page.simplified-bank .coach-chat{border-radius:12px;border:1px solid #d5e3ed;border-top:3px solid #005b96}
+.space-page.simplified-bank .coach-bubble{font-size:14px;line-height:1.65;border-radius:10px}
+.space-page.simplified-bank .coach-user{background:#e9f2f8;color:#16496b}
+.space-page.simplified-bank .coach-reply{background:#f5f8fa;color:#294d63}
+.space-page.simplified-bank .coach-input textarea{font-size:15px}
+.assistant-dock{font-family:"FF DIN",Arial,sans-serif}.assistant-dock h2{font-family:"Rotis Semi Serif",Georgia,serif;font-size:23px;font-weight:400}.assistant-launcher{font-family:"FF DIN",Arial,sans-serif;background:#005b96;border-radius:8px;font-size:14px}
+@media(min-width:1500px){.space-page.simplified-bank .simple-main.space-panel{max-width:1240px}}
+@media(max-width:1280px){.space-page.simplified-bank .simple-main.space-panel{margin:28px 28px 0;width:calc(100% - 56px)}}
+@media(max-width:800px){.space-page.simplified-bank .overview-highlight{grid-template-columns:1fr}.space-page.simplified-bank .overview-highlight>div:first-child,.space-page.simplified-bank .overview-highlight .overview-next{padding:28px}.space-page.simplified-bank .overview-next h3{max-width:none;font-size:26px}.space-page.simplified-bank .simple-health-cards{grid-template-columns:1fr;gap:14px}.space-page.simplified-bank .simple-health{padding:24px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}.space-page.simplified-bank .simple-health>strong{font-size:30px;margin:0}.space-page.simplified-bank .simple-health>small{width:max-content}.space-page.simplified-bank .simple-health p,.space-page.simplified-bank .vital-math-button{grid-column:1/-1}.space-page.simplified-bank .bank-quick-actions{gap:10px}.space-page.simplified-bank .bank-quick-actions a{padding:15px 12px;gap:8px;font-size:12px;flex-wrap:wrap}.space-page.simplified-bank .bank-quick-actions a>svg:last-child{display:none}}
+@media(max-width:560px){.space-page.simplified-bank{padding-inline:0}.space-page.simplified-bank .banking-masthead{padding-inline:16px}.space-page.simplified-bank .simple-bank-header{min-height:72px;gap:14px}.space-page.simplified-bank .simple-bank-header .wordmark{font-size:25px}.space-page.simplified-bank .header-household{display:none}.space-page.simplified-bank .simple-header-actions{gap:8px}.space-page.simplified-bank .bank-tab{padding:14px 5px!important;font-size:12px!important;gap:5px}.space-page.simplified-bank .bank-tab>svg{height:16px;width:16px}.space-page.simplified-bank .simple-main.space-panel{margin:24px 16px 0;width:calc(100% - 32px)}.space-page.simplified-bank .simple-page-title h1{font-size:34px}.space-page.simplified-bank .simple-connection{font-size:10px;padding:5px 8px}.space-page.simplified-bank .simple-page-title{align-items:flex-start;gap:10px}.space-page.simplified-bank .simple-page-title .panel-intro{font-size:13px}.space-page.simplified-bank :is(.workspace-card,.simple-card,.simple-request-card){padding:20px}.space-page.simplified-bank .overview-highlight>div:first-child>strong{font-size:48px}.space-page.simplified-bank .bank-quick-actions a{flex-direction:column;align-items:flex-start;font-size:12px}.space-page.simplified-bank .simple-account-row{padding:18px 14px;gap:10px}.space-page.simplified-bank .simple-account-row>b{font-size:20px}.space-page.simplified-bank .simple-account-row strong{font-size:15px}.space-page.simplified-bank .simple-account-row small{font-size:11px}.space-page.simplified-bank .simple-account-row .account-row-icon{width:34px;height:38px}.space-page.simplified-bank .bank-ui-tab{font-size:13px}.space-page.simplified-bank .risk-calendar{grid-template-columns:repeat(5,minmax(0,1fr))}.space-page.simplified-bank .risk-calendar button{min-height:75px}.space-page.simplified-bank .panel-bottom{font-size:10px}.space-page.simplified-bank .transaction-table td,.space-page.simplified-bank .transaction-table th{padding:13px 12px}}
+@media(prefers-reduced-motion:reduce){.space-page.simplified-bank *{scroll-behavior:auto!important;transition:none!important}}
+
+/* PNC reference: charcoal navigation, flat neutral surfaces, DIN typography. */
+.space-page.simplified-bank{--bank-blue:#006ba6;--bank-navy:#333f48;--bank-orange:#f58000;--bank-text:#464646;--bank-muted:#63666a;--bank-border:#d5d7d9;background:#fff;color:#464646;font-size:16px}
+.space-page.simplified-bank :is(h1,h2,h3,h4){font-family:"FF DIN",Arial,sans-serif;color:#464646;letter-spacing:-.02em}
+.space-page.simplified-bank .banking-masthead{background:#424f58;padding-inline:32px;box-shadow:none}
+.space-page.simplified-bank .simple-bank-header{min-height:88px}
+.space-page.simplified-bank .simple-bank-header .wordmark{font-family:"Rotis Semi Serif",Georgia,serif;font-size:34px;font-weight:400}
+.space-page.simplified-bank .simple-bank-header .logo-icon{border-radius:50%;background:#f58000;color:#fff;border:0;box-shadow:none}
+.space-page.simplified-bank .header-household>summary{background:transparent;border:0;border-left:1px solid #ffffff30;border-radius:0;padding-left:24px}
+.space-page.simplified-bank .header-menu>summary{font-size:15px}
+.space-page.simplified-bank .simple-profile-avatar{background:white;color:#333f48}
+.space-page.simplified-bank .bank-navigation{background:#2c3943;max-width:none;margin-inline:-32px;padding-inline:max(32px,calc((100vw - 1240px)/2));display:flex;justify-content:flex-start;border:0;border-radius:0}
+.space-page.simplified-bank .bank-tab{background:#2c3943!important;color:white!important;border:0!important;border-top:4px solid transparent!important;min-height:68px;padding:20px 30px!important;text-transform:uppercase;font-size:15px!important;font-weight:500;letter-spacing:.25px;justify-content:flex-start}
+.space-page.simplified-bank .bank-tab.bank-tab-active{border-top-color:#f58000!important;background:#25313a!important;color:white!important}
+.space-page.simplified-bank .bank-tab:hover{background:#35444f!important;color:white!important}
+.space-page.simplified-bank .bank-tab svg{display:none}
+.space-page.simplified-bank .simple-page-title{margin-bottom:32px;padding-bottom:24px;border-bottom:1px solid #d8dadd}
+.space-page.simplified-bank .simple-page-title h1{font-family:"FF DIN",Arial,sans-serif;font-size:42px;font-weight:700;letter-spacing:-1px;margin:7px 0 13px}
+.space-page.simplified-bank .simple-page-title h1:after{content:"";display:block;width:80px;height:4px;background:#f58000;margin-top:17px}
+.space-page.simplified-bank .simple-page-title .panel-intro{font-size:16px;color:#63666a}
+.space-page.simplified-bank .simple-connection{background:transparent;border:0;border-radius:0;color:#536354;font-size:12px}
+.space-page.simplified-bank :is(.simple-card,.workspace-card,.simple-request-card,.simple-health){border-radius:0;box-shadow:none;border-color:#d6d8da}
+.space-page.simplified-bank :is(.simple-card h2,.workspace-card h3){font-size:24px;font-weight:500}
+.space-page.simplified-bank :is(.workspace-copy,.simple-muted,.simple-card>p,.simple-empty p){color:#63666a;font-size:15px}
+.space-page.simplified-bank .simple-section-heading h2{font-size:27px;font-weight:500}
+.space-page.simplified-bank .overview-highlight{border:0;border-radius:0;box-shadow:none;background:#eee;grid-template-columns:1.2fr 1fr}
+.space-page.simplified-bank .overview-highlight>div:first-child{background:#ededee;color:#464646;padding:36px 40px}
+.space-page.simplified-bank .overview-highlight>div:first-child:after{display:none}
+.space-page.simplified-bank .overview-highlight>div>span{color:#63666a;font-size:12px;letter-spacing:1px;font-weight:500}
+.space-page.simplified-bank .overview-highlight>div:first-child>strong{color:#464646;font-weight:400;font-size:58px;margin-top:16px}
+.space-page.simplified-bank .overview-highlight p{color:#63666a;font-size:15px}
+.space-page.simplified-bank .overview-highlight a{background:#006ba6;color:#fff;border-radius:3px;font-size:15px;font-weight:500;padding:12px 21px;min-height:46px}
+.space-page.simplified-bank .overview-highlight .overview-next{background:#f6f6f6;border:0;border-left:1px solid #d8dadd;padding:36px 40px}
+.space-page.simplified-bank .overview-next>span{color:#63666a!important}
+.space-page.simplified-bank .overview-next h3{font-family:"FF DIN",Arial,sans-serif;font-weight:500;font-size:27px;color:#464646;max-width:none}
+.space-page.simplified-bank .overview-next a{background:transparent;color:#006ba6;border:1px solid #006ba6}
+.space-page.simplified-bank .bank-quick-actions{border-bottom:1px solid #d8dadd;margin-top:0;gap:0}
+.space-page.simplified-bank .bank-quick-actions a{background:transparent;border:0;border-right:1px solid #d8dadd;border-radius:0;box-shadow:none;color:#006ba6;padding:23px 25px;min-height:76px;font-size:15px}
+.space-page.simplified-bank .bank-quick-actions a:last-child{border-right:0}
+.space-page.simplified-bank .bank-quick-actions a:hover{background:#f6f6f6;box-shadow:none}
+.space-page.simplified-bank .bank-quick-actions a>svg:first-child{background:none;border-radius:0;padding:0;color:#006ba6}
+.space-page.simplified-bank .simple-health-cards{gap:0;border-top:1px solid #d8dadd;border-bottom:1px solid #d8dadd}
+.space-page.simplified-bank .simple-health{border:0!important;border-right:1px solid #d8dadd!important;border-radius:0;background:white;padding:26px 30px}
+.space-page.simplified-bank .simple-health:last-child{border-right:0!important}
+.space-page.simplified-bank .simple-health>strong{color:#464646;font-size:36px;font-weight:400}
+.space-page.simplified-bank .simple-health>small{padding:0;border:0;border-radius:0;background:transparent!important;font-weight:500;font-size:13px}
+.space-page.simplified-bank .simple-health>span{color:#464646;font-size:16px;font-weight:500}
+.space-page.simplified-bank .simple-health p{font-size:14px;color:#63666a}
+.space-page.simplified-bank :is(.account-row-icon,.bill-icon,.request-card-icon){background:transparent;border:0;border-radius:0;color:#006ba6}
+.space-page.simplified-bank :is(.workspace-button,.simple-link-button,.planning-start form button){background:#006ba6;border-color:#006ba6;border-radius:3px;font-size:15px;font-weight:500}
+.space-page.simplified-bank .workspace-button.secondary{background:white;color:#006ba6;border-color:#006ba6}
+.space-page.simplified-bank :is(input,select,textarea){border-color:#aeb6bc;border-radius:2px;font-size:16px}
+.space-page.simplified-bank .bank-ui-tablist{gap:28px;border-bottom-color:#bfc5c9}
+.space-page.simplified-bank .bank-ui-tab{font-size:15px;padding:16px 0;text-transform:none}
+.space-page.simplified-bank .bank-ui-tab[data-state=active]{border-bottom-color:#f58000;color:#333f48}
+.space-page.simplified-bank .bank-ui-tab small{font-size:12px;color:#63666a;text-transform:none}
+.space-page.simplified-bank .simple-account-list.account-card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;margin-top:4px}
+.space-page.simplified-bank .simple-account-row.account-tile{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:0;min-height:282px;text-align:left;padding:24px 24px 0;border:1px solid #cbd0d4;border-top:4px solid #424f58;border-radius:0;background:#fff;box-shadow:none;overflow:hidden}
+.space-page.simplified-bank .account-tile:hover{border-color:#006ba6!important;box-shadow:none!important;background:#fafbfc!important}
+.space-page.simplified-bank .account-tile-owner{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:23px}
+.space-page.simplified-bank .account-owner-label{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:500;line-height:1.4;color:#464646}
+.space-page.simplified-bank .account-owner-label.yours{color:#006ba6}
+.space-page.simplified-bank .account-owner-label.joint{color:#865019}
+.space-page.simplified-bank .account-access-note{font-size:10px;color:#72787c;white-space:nowrap;text-transform:uppercase;letter-spacing:.4px}
+.space-page.simplified-bank .account-tile-name{display:block;min-height:64px}
+.space-page.simplified-bank .account-tile-name strong{display:block;color:#464646;font-size:21px;font-weight:500;line-height:1.25;overflow-wrap:anywhere}
+.space-page.simplified-bank .account-tile-name small{display:block;color:#63666a;font-size:13px;text-transform:capitalize;margin:6px 0 0}
+.space-page.simplified-bank .account-tile-balance{display:flex;flex-direction:column;gap:4px;margin:19px 0 25px}
+.space-page.simplified-bank .account-tile-balance small{font-size:12px;color:#63666a;margin:0}
+.space-page.simplified-bank .account-tile-balance b{font-size:34px;font-weight:400;color:#464646;line-height:1.15;letter-spacing:-.8px;font-variant-numeric:tabular-nums}
+.space-page.simplified-bank .account-tile-footer{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:auto -24px 0;border-top:1px solid #d8dadd;padding:16px 24px;color:#006ba6;font-size:13px;font-weight:500;background:#fbfbfb}
+.space-page.simplified-bank .simple-account-title{border:0;border-bottom:1px solid #cbd0d4;border-radius:0;padding:24px 0 30px;background:white;gap:24px}
+.space-page.simplified-bank .simple-account-title>strong{color:#464646;font-weight:400;font-size:38px}
+.space-page.simplified-bank .account-name-heading{display:flex;align-items:center;gap:16px;margin-top:12px;flex-wrap:wrap}
+.space-page.simplified-bank .account-name-heading h2{margin:0;font-size:30px;font-weight:500}
+.space-page.simplified-bank .account-rename{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#006ba6;padding:8px 0;text-decoration:underline;font-size:13px}
+.space-page.simplified-bank .account-name-editor form{margin-top:12px}.space-page.simplified-bank .account-name-editor form>label{display:block;font-size:13px;margin-bottom:6px;color:#464646}.space-page.simplified-bank .account-name-editor form>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.space-page.simplified-bank .account-name-editor input{min-width:200px;flex:1}
+.space-page.simplified-bank .simple-request-list{gap:0;border-top:1px solid #d8dadd}
+.space-page.simplified-bank .simple-request-card{border:0;border-bottom:1px solid #d8dadd;border-radius:0;box-shadow:none;padding:24px 8px;margin:0;background:white}
+.space-page.simplified-bank .simple-request-card h2{color:#464646;font-size:21px}
+.space-page.simplified-bank .simple-status{background:transparent;color:#63666a;border:0;border-radius:0;padding:0;font-size:11px!important}
+.space-page.simplified-bank .simple-filter-pills{background:transparent;border-radius:0;padding:0;gap:4px}
+.space-page.simplified-bank .simple-filter-pills button{border-radius:0;background:transparent;border-bottom:2px solid transparent}
+.space-page.simplified-bank .simple-filter-pills button.selected{box-shadow:none;border-bottom-color:#f58000;color:#333f48}
+.space-page.simplified-bank .simple-more{border:0;border-top:1px solid #d8dadd;border-bottom:1px solid #d8dadd;border-radius:0}
+.space-page.simplified-bank .simple-more>summary{color:#464646;font-size:15px;padding:20px 0}
+.space-page.simplified-bank .simple-more-content{padding:16px 0;border:0}
+.space-page.simplified-bank :is(.workspace-impacts,.live-purchase-numbers)>div{background:#f3f3f4;border:0;border-radius:0}
+.space-page.simplified-bank :is(.workspace-impacts,.live-purchase-numbers) strong{color:#464646;font-weight:400}
+.space-page.simplified-bank :is(.risk-chart,.live-purchase-chart,.simple-empty){border-radius:0;box-shadow:none}
+.space-page.simplified-bank .planning-start{border-left:0;border-top:4px solid #f58000;background:#f3f3f4}
+.space-page.simplified-bank .simple-demo-badge,.space-page.simplified-bank .live-data-tag{border-radius:0;background:transparent;border-color:#cbd0d4;color:#63666a}
+.space-page.simplified-bank .coach-chat{border-top-color:#424f58}
+.space-page.simplified-bank .panel-bottom{font-size:12px;color:#63666a}
+.assistant-dock{border-radius:3px}.assistant-dock>header{background:#333f48}.assistant-launcher{border-radius:3px;background:#006ba6}
+@media(max-width:1000px){.space-page.simplified-bank .simple-account-list.account-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.space-page.simplified-bank .bank-tab{padding:20px!important;font-size:14px!important}}
+@media(max-width:800px){.space-page.simplified-bank .overview-highlight{grid-template-columns:1fr}.space-page.simplified-bank .overview-highlight .overview-next{border-left:0;border-top:1px solid #d8dadd}.space-page.simplified-bank .simple-health{border-right:0!important;border-bottom:1px solid #d8dadd!important;padding:24px}.space-page.simplified-bank .simple-health:last-child{border-bottom:0!important}.space-page.simplified-bank .simple-page-title h1{font-size:36px}}
+@media(max-width:560px){.space-page.simplified-bank .banking-masthead{padding-inline:16px}.space-page.simplified-bank .bank-navigation{margin-inline:-16px;padding-inline:8px;justify-content:space-between}.space-page.simplified-bank .bank-tab{padding:15px 10px!important;font-size:12px!important;min-height:58px}.space-page.simplified-bank .simple-account-list.account-card-grid{grid-template-columns:1fr;gap:18px}.space-page.simplified-bank .simple-account-row.account-tile{min-height:260px;padding:22px 22px 0}.space-page.simplified-bank .account-tile-footer{margin-inline:-22px;padding-inline:22px}.space-page.simplified-bank .simple-account-title{flex-direction:column;align-items:flex-start}.space-page.simplified-bank .simple-account-title>strong{font-size:34px}.space-page.simplified-bank .overview-highlight>div:first-child,.space-page.simplified-bank .overview-highlight .overview-next{padding:26px}.space-page.simplified-bank .bank-quick-actions a{padding:18px 10px;font-size:12px;min-height:85px}.space-page.simplified-bank .simple-page-title h1{font-size:32px}}
+.space-page.simplified-bank .signin-options{max-width:680px;margin:0 auto;padding:36px}.space-page.simplified-bank .signin-options>h3{font-size:30px;margin:10px 0 12px}.signin-methods{display:grid;gap:14px;margin:25px 0 20px}.space-page.simplified-bank .signin-method{display:flex;align-items:center;gap:16px;border:1px solid #b9c3cb;background:#fff;border-radius:2px;text-align:left;padding:20px;color:#333f48;min-height:90px}.space-page.simplified-bank .signin-method.selected{border:2px solid #006ba6;padding:19px;background:#f6f9fb}.space-page.simplified-bank .signin-method>span:not(.google-letter){flex:1}.space-page.simplified-bank .signin-method strong{display:block;font-size:17px;font-weight:500}.space-page.simplified-bank .signin-method small{display:block;font-size:13px;color:#63666a;margin-top:5px}.space-page.simplified-bank .signin-method:disabled{opacity:.65}.google-letter{font-family:Arial,sans-serif;font-weight:700;font-size:25px;color:#4285f4;width:24px;text-align:center}.household-signin-form{border-top:1px solid #d5d7d9;margin-top:25px;padding-top:24px}.household-signin-form h4{font-size:20px;margin:0}.space-page.simplified-bank .first-pin-option{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:400}.space-page.simplified-bank .first-pin-option input{width:17px;height:17px;min-height:17px;padding:0;accent-color:#006ba6}.signin-create{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border-top:1px solid #d5d7d9;margin-top:28px;padding-top:20px;font-size:14px}.signin-existing{display:flex;align-items:center;gap:12px;padding:16px;background:#f2f6f3;font-size:14px;flex-wrap:wrap}@media(max-width:560px){.space-page.simplified-bank .signin-options{padding:23px}.space-page.simplified-bank .signin-method{padding:16px;gap:12px}.space-page.simplified-bank .signin-method.selected{padding:15px}}
+.space-page.simplified-bank .onboarding-welcome{max-width:760px;margin:0 auto;padding:36px}.space-page.simplified-bank .onboarding-welcome .simple-eyebrow{display:flex;align-items:center;gap:8px;color:#37714a}.space-page.simplified-bank .onboarding-welcome h2{font-size:32px;margin:18px 0 12px}.onboarding-actions{display:flex;flex-wrap:wrap;gap:14px;margin:25px 0}
+.family-invitation-row{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;border-top:1px solid #d5d7d9;padding:22px 0}.family-invitation-row p{margin:7px 0;font-size:14px}.family-invitation-row small{font-size:12px;color:#63666a}.family-invitation-row .workspace-field{margin-top:16px;max-width:280px}.family-member-list{margin-bottom:28px}@media(max-width:640px){.family-invitation-row{flex-direction:column;gap:16px}}

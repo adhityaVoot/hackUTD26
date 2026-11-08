@@ -1,0 +1,27 @@
+import {describe,it,expect,vi} from 'vitest';
+import {Timestamp,Identity} from 'spacetimedb';
+vi.mock('./auth',async()=>({...await vi.importActual<any>('./auth'),requireCoOwner:(ctx:any)=>{if(ctx.me.person.role!=='coowner')throw Error('Co-owner required');return ctx.me},requireStepUp:(ctx:any)=>{if(!ctx.verified)throw Error('PIN required')}}));
+import {inviteFamilyMember,acceptFamilyInvitation,verifiedEmail,recordAuthenticatedEmail} from './familyInvitations';
+import {joinHousehold,myFamilyInvitations} from './index';
+import {addPerson} from './life';
+const issuer='https://auth.spacetimedb.com/oidc',aud='client_034tn4mKpPebmrzFj9lznr';
+function fixture(){
+ const data:Record<string,any[]>={};let seq=10n;const pks:Record<string,string>={authenticatedEmail:'identity',householdAccess:'householdId',personIdentity:'personId',member:'identity',invitationEmailJob:'scheduledId'};
+ const eq=(a:any,b:any)=>a?.toHexString&&b?.toHexString?a.toHexString()===b.toHexString():a===b;
+ const db:any=new Proxy({}, {get:(_,name:string)=>{const rows=data[name]??=[];return new Proxy({iter:()=>rows.values(),insert:(r:any)=>{const pk=pks[name]||'id',next={...r,[pk]:r[pk]===0n?++seq:r[pk]};rows.push(next);return next}}, {get:(obj:any,col:string)=>col in obj?obj[col]:{find:(v:any)=>rows.find(r=>eq(r[col],v)),filter:(v:any)=>rows.filter(r=>eq(r[col],v)),update:(r:any)=>{rows[rows.findIndex(x=>eq(x[col],r[col]))]=r;return r},delete:(v:any)=>{const i=rows.findIndex(r=>eq(r[col],v));if(i>=0)rows.splice(i,1);return i>=0}}});}});
+ const now=new Timestamp(1800000000000000n);const alice=new Identity(1n),bob=new Identity(2n);
+ const auth=(email:string)=>({jwt:{issuer,audience:[aud],fullPayload:{email,email_verified:true}}});
+ const ctx:any={sender:alice,db,timestamp:now,env:{},senderAuth:auth('alice@example.com'),me:{person:{id:1n,role:'coowner'},household:{id:7n}},verified:true};
+ db.household.insert({id:7n,inviteCode:'FAMILY',name:'Family'});db.householdAccess.insert({householdId:7n,invitationOnly:true});db.person.insert({id:1n,householdId:7n,role:'coowner',displayName:'Alice'});db.member.insert({identity:alice,householdId:7n,personId:1n});
+ const recipient={...ctx,sender:bob,senderAuth:auth('bob@example.com')};
+ return {ctx,recipient,data,db,auth};
+}
+describe('email family invitations',()=>{
+ it('saves pending invitations without creating membership or claiming email was sent',()=>{const f=fixture();inviteFamilyMember(f.ctx,' BOB@example.com ','Bob','member');expect(f.data.person).toHaveLength(1);expect(f.data.member).toHaveLength(1);expect(f.data.familyInvitation[0]).toMatchObject({email:'bob@example.com',status:'pending',deliveryStatus:'not_configured'});expect(f.data.invitationEmailJob).toBeUndefined();});
+ it('queues actual delivery only when a sender is configured',()=>{const f=fixture();f.ctx.env={RESEND_API_KEY:'test',INVITE_FROM_EMAIL:'Tandem <test@example.com>'};inviteFamilyMember(f.ctx,'bob@example.com','Bob','member');expect(f.data.familyInvitation[0].deliveryStatus).toBe('queued');expect(f.data.invitationEmailJob).toHaveLength(1);});
+ it('requires the matching verified email and explicit acceptance before adding a person',()=>{const f=fixture();inviteFamilyMember(f.ctx,'bob@example.com','Bob','member');const id=f.data.familyInvitation[0].id;f.recipient.senderAuth=f.auth('other@example.com');expect(()=>acceptFamilyInvitation(f.recipient,id,'1234')).toThrow('signed-in email');expect(f.data.person).toHaveLength(1);f.recipient.senderAuth=f.auth('bob@example.com');acceptFamilyInvitation(f.recipient,id,'1234');expect(f.data.person).toHaveLength(2);expect(f.data.member).toHaveLength(2);expect(f.data.familyInvitation[0].status).toBe('accepted');expect(f.data.account).toBeUndefined();expect(()=>acceptFamilyInvitation(f.recipient,id,'1234')).toThrow();});
+ it('rejects expired and revoked invitations',()=>{for(const status of ['revoked','pending']){const f=fixture();inviteFamilyMember(f.ctx,'bob@example.com','Bob','member');const row=f.data.familyInvitation[0];row.status=status;row.expiresAt=new Timestamp(0n);expect(()=>acceptFamilyInvitation(f.recipient,row.id,'1234')).toThrow('not available');expect(f.data.person).toHaveLength(1);}});
+ it('rejects unverified emails and wrong issuers/audiences',()=>{const f=fixture();f.ctx.senderAuth.jwt.fullPayload.email_verified=false;expect(()=>verifiedEmail(f.ctx)).toThrow();f.ctx.senderAuth=f.auth('alice@example.com');f.ctx.senderAuth.jwt.issuer='https://other.example';expect(()=>verifiedEmail(f.ctx)).toThrow();f.ctx.senderAuth=f.auth('alice@example.com');f.ctx.senderAuth.jwt.audience=['wrong-client'];expect(()=>verifiedEmail(f.ctx)).toThrow();});
+ it('does not expose another email’s invitations in the inbox',()=>{const f=fixture();inviteFamilyMember(f.ctx,'bob@example.com','Bob','member');recordAuthenticatedEmail(f.ctx);recordAuthenticatedEmail(f.recipient);expect(myFamilyInvitations(f.ctx as any)).toHaveLength(0);expect(myFamilyInvitations(f.recipient as any)).toHaveLength(1);});
+ it('prevents duplicate active invitations and legacy code/name joins',()=>{const f=fixture();inviteFamilyMember(f.ctx,'bob@example.com','Bob','member');expect(()=>inviteFamilyMember(f.ctx,'bob@example.com','Bob','member')).toThrow('already pending');expect(()=>joinHousehold(f.recipient,{inviteCode:'FAMILY',name:'Alice'})).toThrow('email invitation');expect(()=>addPerson(f.ctx,'Bob','member')).toThrow('email');});
+});

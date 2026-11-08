@@ -27,6 +27,11 @@ function wipeHousehold(ctx: Ctx, householdId: bigint): void {
   for(const row of list(ctx.db.ageProfile.householdId.filter(householdId)))ctx.db.ageProfile.personId.delete(row.personId);
   for(const row of list(ctx.db.accountPrivacy.householdId.filter(householdId)))ctx.db.accountPrivacy.accountId.delete(row.accountId);
   for(const row of list(ctx.db.moneyRequest.householdId.filter(householdId)))ctx.db.moneyRequest.id.delete(row.id);
+  const inviteIds=new Set(list(ctx.db.familyInvitation.householdId.filter(householdId)).map(row=>row.id));
+  for(const job of list(ctx.db.invitationEmailJob.iter()))if(inviteIds.has(job.invitationId))ctx.db.invitationEmailJob.scheduledId.delete(job.scheduledId);
+  for(const id of inviteIds)ctx.db.familyInvitation.id.delete(id);
+  for(const row of list(ctx.db.personIdentity.householdId.filter(householdId)))ctx.db.personIdentity.personId.delete(row.personId);
+  ctx.db.householdAccess.householdId.delete(householdId);
   const grantIds = new Set<bigint>();
   for (const row of ctx.db.grant.householdId.filter(householdId)) grantIds.add(row.id);
   for (const row of list(ctx.db.grantExpiry.iter())) {
