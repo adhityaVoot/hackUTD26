@@ -8,7 +8,7 @@ import { lookupInformation, priceFromPassages } from './lookup';
 import { DISCLAIMER } from './prompts';
 import { describeLever, diffView, forecastSummary, getOpportunities, runSim, type AgentState, type Sim } from './tools';
 import { searchMemory } from './memory';
-import { requiredMonthly } from './twin';
+import { GOAL_HORIZON_DAYS, requiredMonthly } from './twin';
 import type { FeatureKind, Highlight, InsightResult, ScenarioDraft, TwinDiff } from './types';
 
 const $ = (n: number) => `${n < 0 ? '-' : ''}$${Math.round(Math.abs(n)).toLocaleString('en-US')}`;
@@ -42,7 +42,7 @@ export function highlightsFromDiff(d: TwinDiff, max = 5): Highlight[] {
 }
 
 function draft(s: Sim): ScenarioDraft {
-  return { simId: s.simId, title: s.title, levers: s.levers, diff: s.diff };
+  return { simId: s.simId, title: s.title, levers: s.levers, diff: s.diff, series: s.series };
 }
 
 function base(state: AgentState, title: string, answer: string, source: InsightResult['source']): InsightResult {
@@ -53,12 +53,12 @@ function base(state: AgentState, title: string, answer: string, source: InsightR
 // The model writes {sim_1.lowest_cash_after}, {sim_1.goal_2.shift_days} or
 // {now.peak_overdraft_risk_pct_next_30_days}; the engine fills them with exact values.
 
-const SLOT = /\{(sim_\d+|now|savings)\.([a-z0-9_]+)(?:\.([a-z0-9_]+))?\}/g;
+const SLOT = /\{(sim_\d+|now|savings|budget)\.([a-z0-9_]+)(?:\.([a-z0-9_]+))?\}/g;
 
 function formatSlot(key: string, v: unknown): string {
   if (typeof v !== 'number') return String(v);
   if (/_pct/.test(key)) return `${v}%`;
-  if (/cash|surplus|income|outflow|buffer|balance/.test(key)) return $(v);
+  if (/cash|surplus|income|outflow|buffer|balance|budget|price|cost|amount|bills|total|per_month|target/.test(key)) return $(v);
   return v.toLocaleString('en-US');
 }
 
@@ -69,6 +69,7 @@ export function fillSlots(text: string, state: AgentState): { text: string; unkn
     let obj: Record<string, unknown> | undefined;
     if (src === 'now') obj = now;
     else if (src === 'savings') obj = state.lastSavings ?? undefined;
+    else if (src === 'budget') obj = state.lastBudget ?? undefined;
     else {
       const sim = state.sims.get(src);
       obj = sim ? (diffView(sim) as Record<string, unknown>) : undefined;
@@ -142,6 +143,13 @@ class Checker {
   }
 }
 
+/** Runs the same checks a writer's text gets (numbers, slots, field names, direction, debt pauses). */
+export function verifyText(state: AgentState, text: string, max = 700): { text: string; errors: string[] } {
+  const c = new Checker(state);
+  const out = c.text('reviewed answer', text, true, max);
+  return { text: out, errors: c.errors };
+}
+
 export interface Finalized {
   result: InsightResult | null;
   errors: string[];
@@ -158,7 +166,10 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
   switch (state.feature) {
     case 'twin': {
       r.verdict = c.oneOf('verdict', parsed.verdict, ['yes', 'yes_with_tradeoffs', 'not_yet', 'no'], 'yes_with_tradeoffs');
-      const main = c.sim('recommended_sim', parsed.recommended_sim);
+      r.followUp = c.text('follow_up', parsed.follow_up, false, 300) || undefined;
+      // Asking for a missing amount is the one case where no fork is needed yet.
+      const askingForAmount = !!r.followUp && state.sims.size === 0 && r.verdict === 'not_yet';
+      const main = askingForAmount ? undefined : c.sim('recommended_sim', parsed.recommended_sim);
       const alts = (Array.isArray(parsed.alternative_sims) ? parsed.alternative_sims : []).map((s: unknown, i: number) => c.sim(`alternative_sims[${i}]`, s, false)).filter(Boolean) as Sim[];
       const tradeoffs = c.texts('tradeoffs', parsed.tradeoffs, 4);
       if (main) {
@@ -329,6 +340,8 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
       break;
     }
     case 'coach':
+    case 'clarify':
+    case 'debate':
       c.errors.push('internal: coach must be routed before running');
       break;
     case 'opportunity': {
@@ -347,6 +360,13 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
       break;
     }
   }
+  if (Array.isArray(parsed.sources)) {
+    r.sources = parsed.sources
+      .filter((x: any) => typeof x?.url === 'string' && state.sources.has(x.url))
+      .slice(0, 4)
+      .map((x: any) => ({ title: state.sources.get(x.url)!, url: x.url }));
+  }
+  if (!r.followUp && typeof parsed.follow_up === 'string') r.followUp = c.text('follow_up', parsed.follow_up, false, 300) || undefined;
   return c.errors.length ? { result: null, errors: c.errors } : { result: r, errors: [] };
 }
 
@@ -355,14 +375,14 @@ function publicOpp(o: ReturnType<typeof getOpportunities>[number]) {
 }
 
 function defaultTitle(f: FeatureKind): string {
-  return { twin: 'Your question', ripple: 'Ripple effect', negotiation: 'A middle path', stress: 'Stress test', life_event: 'Life event plan', memory: 'From your decision log', opportunity: 'Opportunities', health: 'Your financial health', briefing: 'Household briefing', coach: 'Coach' }[f];
+  return { twin: 'Your question', ripple: 'Ripple effect', negotiation: 'A middle path', stress: 'Stress test', life_event: 'Life event plan', memory: 'From your decision log', opportunity: 'Opportunities', health: 'Your financial health', briefing: 'Household briefing', coach: 'Coach', clarify: 'A few questions first', debate: 'The debate' }[f];
 }
 
 function summaryLine(s: Sim): string {
   const d = s.diff;
   const goal = d.goals.find(g => g.shiftDays !== 0);
   const parts = [`lowest cash ${$(d.minBalanceAfter)}`, `overdraft risk ${d.crunchAfter}%`];
-  if (goal) parts.push(`${goal.name} ${goal.shiftDays > 0 ? `${goal.shiftDays} days later` : `${-goal.shiftDays} days sooner`}`);
+  if (goal) parts.push(`${goal.name} ${goal.shiftDays >= GOAL_HORIZON_DAYS ? 'out of reach within 5 years' : goal.shiftDays > 0 ? `${goal.shiftDays} days later` : `${-goal.shiftDays} days sooner`}`);
   return parts.join(', ');
 }
 
@@ -391,7 +411,7 @@ export function engineChain(s: Sim): { step: string; area: string; severity: str
     out.push({ step: `Overdraft risk goes from ${d.crunchBefore}% to ${d.crunchAfter}% (riskiest day ${d.crunchDayAfter}).`, area: 'risk', severity: d.crunchAfter > 25 ? 'high' : d.crunchAfter > 10 ? 'medium' : 'low' });
   }
   for (const g of d.goals.filter(x => x.shiftDays !== 0)) {
-    out.push({ step: `${g.name} ${g.shiftDays > 0 ? `slips ${g.shiftDays} days` : `arrives ${-g.shiftDays} days sooner`}: ${g.beforeEta} to ${g.afterEta}.`, area: 'goal', severity: g.shiftDays > 90 ? 'high' : 'medium' });
+    out.push({ step: `${g.name} ${g.shiftDays >= GOAL_HORIZON_DAYS ? 'moves out of reach within 5 years' : g.shiftDays > 0 ? `slips ${g.shiftDays} days` : `arrives ${-g.shiftDays} days sooner`}: ${g.beforeEta} to ${g.afterEta}.`, area: 'goal', severity: g.shiftDays > 90 ? 'high' : 'medium' });
   }
   for (const v of d.vitals.filter(x => x.direction !== 'same' && !['crunch_risk', 'goal_track'].includes(x.key))) {
     out.push({ step: `${VITAL_LABEL[v.key]} ${v.direction === 'worse' ? 'weakens' : 'improves'}: ${v.before} to ${v.after}.`, area: 'vital', severity: v.direction === 'worse' ? 'medium' : 'low' });
@@ -421,14 +441,20 @@ export function fallback(state: AgentState, reason: string): InsightResult {
         if (lever.kind === 'one_time') lever = { ...lever, amount: price };
         sourceNote = found.passages[0] ? ` Using ${$(price)} from ${found.passages[0].title}.` : '';
       }
-      const { sim } = runSim(state, shortLabel(q), [lever]);
-      if (!sim) return base(state, defaultTitle(state.feature), 'I could not turn that into a scenario. Try including an amount and a month.', 'fallback');
+      const { sim, errors } = runSim(state, shortLabel(q), [lever]);
+      if (!sim) {
+        const why = errors.join('; ').replace(/^lever 1: /, '');
+        return base(state, defaultTitle(state.feature), `I could not simulate that: ${why}. Try rephrasing with an amount and a month.`, 'fallback');
+      }
       const d = sim.diff;
       const worseBand = d.vitals.some(v => v.direction === 'worse' && sim.result.vitals.find(x => x.key === v.key)!.band !== state.baseline.vitals.find(x => x.key === v.key)!.band);
       const breach = !!d.bufferBreachDay;
       const goalSlip = d.goals.some(g => g.shiftDays > 30);
       if (state.feature === 'twin') {
-        const verdict = breach ? 'not_yet' : worseBand || goalSlip ? 'yes_with_tradeoffs' : 'yes';
+        // Out of reach: costs more than all household cash plus two years of surplus.
+        const reach = state.baseline.startLiquid + 24 * Math.max(0, state.baseline.monthlySurplus);
+        const outOfReach = breach && lever.kind === 'one_time' && lever.amount > reach;
+        const verdict = outOfReach ? 'no' : breach ? 'not_yet' : worseBand || goalSlip ? 'yes_with_tradeoffs' : 'yes';
         const r = base(state, sim.title, '', 'fallback');
         r.verdict = verdict;
         r.answer =
@@ -436,7 +462,9 @@ export function fallback(state: AgentState, reason: string): InsightResult {
             ? `Yes. ${sim.title} keeps lowest household cash at ${$(d.minBalanceAfter)} and overdraft risk at ${d.crunchAfter}%.${sourceNote}`
             : verdict === 'yes_with_tradeoffs'
               ? `You can, with trade-offs: ${summaryLine(sim)}.${sourceNote}`
-              : `Not yet. Household cash would fall below the buffer on ${d.bufferBreachDay}. ${summaryLine(sim)}.${sourceNote}`;
+              : verdict === 'no'
+                ? `No. At ${$(lever.kind === 'one_time' ? lever.amount : 0)} it costs more than the household's ${$(state.baseline.startLiquid)} in cash plus two years of savings, and cash would go negative (${$(d.minBalanceAfter)}).${sourceNote}`
+                : `Not yet. Household cash would fall below the buffer on ${d.bufferBreachDay}. ${summaryLine(sim)}.${sourceNote}`;
         if (breach && lever.kind === 'one_time') {
           const later = runSim(state, `${sim.title}, saved up first`, [{ ...lever, date: laterDate(state, lever.amount) }]).sim;
           if (later) {
@@ -553,6 +581,10 @@ export function fallback(state: AgentState, reason: string): InsightResult {
       r.extra = { mode: sentinel ? 'sentinel' : 'weekly', reason };
       return r;
     }
+    case 'clarify':
+      return base(state, 'A few questions first', 'Tell me a bit more and I can work it out.', 'fallback');
+    case 'debate':
+      return base(state, 'The debate', 'The debate needs Nemotron; try again when the model is available.', 'fallback');
     case 'coach':
       return base(state, 'Coach', 'I could not work out what to look at. Try asking about a purchase, an emergency, or your vitals.', 'fallback');
     case 'opportunity': {

@@ -5,13 +5,26 @@ import { dayToDate, dayToIso, isoToDay, monthIndexIn } from './dates';
 import type { Lever, TwinData } from './types';
 
 export function parseMoney(text: string): number | null {
+  // "$10M", "10m", "10 mil", "2.5 mm"
+  const short = /\$?\s?(\d+(?:\.\d+)?)\s*(m|mm|mil|million|b|bn|billion)\b/i.exec(text);
+  if (short) {
+    const mult = /^b/i.test(short[2]) ? 1_000_000_000 : 1_000_000;
+    const n = Number(short[1]) * mult;
+    if (Number.isFinite(n) && n > 0) return Math.round(n);
+  }
   const million = /\$?\s?(\d+(?:\.\d+)?)\s*million(?:\s+dollars)?\b/i.exec(text);
   if (million) {
     const n = Number(million[1]) * 1_000_000;
     if (Number.isFinite(n) && n > 0) return Math.round(n);
   }
   const m = /\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k|thousand)?/i.exec(text) ?? /(\d[\d,]*(?:\.\d+)?)\s*(k|thousand|dollars|bucks)\b/i.exec(text);
-  if (!m) return null;
+  if (!m) {
+    // "worth 10,000,000", "costs 45000", "for 1,200": a bare number after a money word.
+    const bare = /\b(?:worth|costs?|costing|price[sd]?|priced at|for|spend(?:ing)?|pay(?:ing)?|budget(?:ed)?|about|around|roughly|of)\s+(\d{1,3}(?:,\d{3})+|\d{3,})(?:\.\d+)?\b/i.exec(text);
+    if (!bare) return null;
+    const n = Number(bare[1].replace(/,/g, ''));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
   let n = Number(m[1].replace(/,/g, ''));
   if (m[2] && /^(k|thousand)$/i.test(m[2])) n *= 1000;
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -263,4 +276,55 @@ export function classifyMessage(text: string): 'twin' | 'ripple' | 'stress' | 'l
   if (/coming up|next (few )?weeks|outlook|bills due|upcoming|this month look/.test(q)) return 'briefing';
   if (/what happens if|knock-on|ripple|consequences|effect of/.test(q)) return 'ripple';
   return 'twin';
+}
+
+// ---------- Clarifying questions (rule-based backup for the coach) ----------
+
+export interface Clarify {
+  message: string;
+  questions: string[];
+}
+
+/**
+ * Questions the coach should ask before planning, or null when there is enough to work with.
+ * Purchases never trigger this: prices can be looked up. Answers already given in earlier turns count.
+ */
+export function clarifyQuestions(message: string, history: { question: string; answer: string }[]): Clarify | null {
+  const said = [...history.map(h => h.question), message].join(' \n ').toLowerCase();
+  const q = message.toLowerCase();
+  const isTrip = /\b(trip|travel|vacation|holiday|honeymoon|itinerary|backpack|tour|visit(ing)?)\b/.test(q);
+  const isBigPlan = /\b(wedding|renovat|remodel|move|moving|relocat|party|celebration)\b/.test(q);
+  if (!isTrip && !isBigPlan) return null;
+  if (history.length >= 2) return null; // already asked once; proceed and state assumptions
+
+  const asks: string[] = [];
+  const hasMoney = parseMoney(said) != null || /\bbudget\b/.test(said);
+  const hasWhen = monthIndexInText(said) || /\b(next|this) (week|month|year|summer|winter|spring|fall)\b|\bin \d+ (weeks?|months?)\b|\d{4}-\d{2}/.test(said);
+  if (isTrip) {
+    const vaguePlaces = /\b(a couple|a few|some|several|two|three|multiple) (of )?(countries|places|cities|destinations)\b|\bsomewhere\b/.test(said) ||
+      (/\b(africa|asia|europe|south america|latin america|middle east|caribbean|southeast asia)\b/.test(said) && !/\b(in|to) [A-Z]/.test([...history.map(h => h.question), message].join(' ')));
+    const hasLength = /\b\d+\s*(days?|nights?|weeks?)\b|\b(a|one|two|three) (week|weeks)\b|\bweekend\b|\bfortnight\b/.test(said);
+    const hasWho = /\b(solo|alone|just me|myself|with my|\d+ (people|of us|adults|travel+ers)|couple|family|partner|wife|husband|kids|friends)\b/.test(said);
+    const hasStyle = /\b(luxury|budget|first class|business class|economy|premium|hostel|hotel|resort|airbnb|[345][- ]?star|backpack(ing)?|mid-?range)\b/.test(said);
+    if (vaguePlaces) asks.push('Which countries or cities do you have in mind? (e.g. Kenya and Morocco, or Japan and Thailand)');
+    if (!hasWhen) asks.push('When are you thinking of going, roughly which month?');
+    if (!hasLength) asks.push('How long would the whole trip be, about a week, two weeks, longer?');
+    if (!hasWho) asks.push("Who's going: just you, or with a partner, family or friends?");
+    if (!hasStyle && !hasMoney) asks.push('What style are you after: budget hostels, comfortable mid-range hotels, or luxury? And economy, business or first class flights?');
+  } else {
+    if (!hasMoney) asks.push('Do you have a rough budget in mind, even a range?');
+    if (!hasWhen) asks.push('When is this happening, roughly?');
+    if (/wedding|party|celebration/.test(q) && !/\b\d+\s*(guests|people)\b/.test(said)) asks.push('About how many guests are you expecting?');
+  }
+  if (asks.length < 2) return null;
+  return {
+    message: isTrip
+      ? "Happy to help plan that! Before I put numbers on it, a few quick questions so the costs are realistic and not guesses:"
+      : 'Happy to help with that. A few quick questions first so I can price it properly:',
+    questions: asks.slice(0, 4),
+  };
+}
+
+function monthIndexInText(text: string): boolean {
+  return /\b(january|february|march|april|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)\b/.test(text) || /\b(in|by|this|next) may\b/.test(text);
 }

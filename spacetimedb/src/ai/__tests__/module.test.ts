@@ -138,19 +138,20 @@ describe('Nemotron module end to end', () => {
     // Draft fork for the Two-Key flow, with real ids and cents.
     const sc = store.rows('scenario')[0];
     expect(sc).toMatchObject({ status: 'draft', agentKind: 'coach', parentId: 50n, scope: 'individual', audiencePersonId: PRIYA });
-    expect(JSON.parse(store.rows('scenarioChange')[0].paramsJson)).toMatchObject({ amountCents: 320000 });
+    expect(JSON.parse(store.rows('scenarioChange')[0].paramsJson)).toMatchObject({ amountCents: 320000, amount: -320000 });
+    expect(typeof JSON.parse(store.rows('scenarioChange')[0].paramsJson).accountId).toBe('number');
     expect(ins.scenarioId).toBe(sc.id);
 
     // Append-only reasoning trail.
     const steps = store.rows('agentLog').map((l: any) => l.step);
     expect(steps).toEqual(expect.arrayContaining(['observe', 'injection_flag', 'pii_scan', 'simulate', 'verify', 'propose', 'usage']));
 
-    // Private inbox: Priya sees it, Sam doesn't, until Priya shares it.
+    // Inherited owner access is private to the requester; it must not leak into a shared answer.
     const seen = (p: bigint) => (mod.myAiInsights as any)(reducerCtx(p)).length;
     expect([seen(PRIYA), seen(SAM)]).toEqual([1, 0]);
     expect((mod.myAgentLog as any)(reducerCtx(SAM)).every((l: any) => l.step === 'injection_flag')).toBe(true);
-    (mod.shareInsight as any)(reducerCtx(PRIYA), { insightId: ins.id });
-    expect(seen(SAM)).toBe(1);
+    expect(() => (mod.shareInsight as any)(reducerCtx(PRIYA), { insightId: ins.id })).toThrow(/another member shared/);
+    expect(seen(SAM)).toBe(0);
   });
 
   it('only the requester can share, and personally granted data blocks sharing', () => {
@@ -241,5 +242,36 @@ describe('Sentinel watch and coach threads (module)', () => {
     // The router saw the earlier turn.
     expect(JSON.stringify(http.calls[0])).toContain('How are we doing?');
     expect(JSON.parse(second.resultJson).extra.routedTo).toBe('briefing');
+  });
+});
+
+describe('coach clarifying questions (module)', () => {
+  it('a vague trip request comes back as questions with no draft forks', () => {
+    (mod.askCoach as any)(reducerCtx(PRIYA), { message: 'Plan a trip to a couple countries in Africa and Asia', threadInsightId: 0n });
+    runJobs(scripted([() => ({ status: 500, body: {} })])); // model down: rule-based questions
+    const r = JSON.parse(store.rows('aiInsight')[0].resultJson);
+    expect(r.kind).toBe('clarify');
+    expect(r.extra.questions.length).toBeGreaterThanOrEqual(3);
+    expect(store.rows('scenario')).toHaveLength(0);
+  });
+});
+
+describe('agent plans become real proposals', () => {
+  it('an engine-compatible agent draft is marked proposable and its member can propose it', () => {
+    (mod.askTwin as any)(reducerCtx(PRIYA), { question: 'Can we afford a $3,200 Japan trip in March?' });
+    runJobs(scripted([
+      () => toolCall('simulate_scenario', { title: 'Japan trip in March', levers: [{ kind: 'one_time', amount: 3200, date: '2027-03-01', label: 'Japan trip' }] }),
+      () => final({ title: 'Japan trip', verdict: 'yes', answer: 'Yes, comfortably.', tradeoffs: [], recommended_sim: 'sim_1' }),
+    ]));
+    const r = JSON.parse(store.rows('aiInsight')[0].resultJson);
+    expect(r.scenarios[0].proposable).toBe(true);
+    const id = BigInt(r.scenarios[0].scenarioId);
+    const change = JSON.parse(store.rows('scenarioChange').find((c: any) => c.scenarioId === id).paramsJson);
+    expect(change).toMatchObject({ amount: -320000, day: expect.any(Number) }); // engine contract: signed cents
+    expect(() => (mod.proposeAgentPlan as any)(reducerCtx(SAM), { scenarioId: id })).toThrow(/not found/); // Priya's private plan
+    (mod.proposeAgentPlan as any)(reducerCtx(PRIYA), { scenarioId: id });
+    const sc = store.rows('scenario').find((x: any) => x.id === id);
+    expect(sc.authorPersonId).toBe(PRIYA);
+    expect(sc.status).not.toBe('draft');
   });
 });

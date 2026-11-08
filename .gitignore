@@ -9,3 +9,8 @@ spacetime.*.local.json
 .env.local
 .env
 !.env.example
+
+# Local synthetic provider IDs and seed progress
+.nessie-seed*.json
+
+*.tsbuildinfo

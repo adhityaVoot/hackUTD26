@@ -132,6 +132,53 @@
     "vote": [
       "scenarioId",
       "decision"
+    ],
+    "sync_nessie_demo": [],
+    "create_money_request": [
+      "recipientPersonId",
+      "amountCents",
+      "reason"
+    ],
+    "respond_money_request": [
+      "requestId",
+      "decision"
+    ],
+    "set_member_birth_date": [
+      "personId",
+      "birthDate"
+    ],
+    "set_account_owner_access": [
+      "accountId",
+      "allowed"
+    ],
+    "open_negotiation": [
+      "topic"
+    ],
+    "submit_position": [
+      "negotiationId",
+      "want",
+      "priority"
+    ],
+    "request_mediation": [
+      "negotiationId"
+    ],
+    "stress_test": [
+      "scenario"
+    ],
+    "simulate_ripple": [
+      "decision"
+    ],
+    "simulate_life_event": [
+      "event"
+    ],
+    "request_health_check": [],
+    "scan_opportunities": [],
+    "request_briefing": [],
+    "debate_decision": [
+      "decision"
+    ],
+    "propose_agent_plan": [
+      "scenarioId"
     ]
   },
   "views": [
@@ -156,6 +203,8 @@
     "myObligations",
     "myTxns",
     "myVitals",
-    "scenarioChanges"
+    "scenarioChanges",
+    "myMoneyRequests",
+    "myAccountPrivacy"
   ]
 }

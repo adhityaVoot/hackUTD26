@@ -1,6 +1,7 @@
 // Drives the full agent loop with a scripted fake Nemotron endpoint.
 import { describe, expect, it } from 'vitest';
 import { runAgent } from '../agent';
+import { sanitizeUserText, scanOutbound } from '../gateway';
 import type { ChatMessage, HttpLike, ModelConfig } from '../model';
 import { buildSnapshot } from '../snapshot';
 import { executeTool, newState } from '../tools';
@@ -323,5 +324,234 @@ describe('pre-demo fixes', () => {
     const card = s.snap.twin.accounts.find(a => a.kind === 'credit_card')!.token;
     const out = executeTool(s, 'simulate_scenario', { title: 'Pay card', levers: [{ kind: 'extra_payment', loan: card, amount: 1200, date: '2026-11-20' }] }) as any;
     expect(out.monthly_surplus_after).toBeGreaterThan(out.monthly_surplus_before); // ~$23/month of 22.99% interest
+  });
+});
+
+describe('names in real household data (NemoTrial)', () => {
+  // Real data: full display names, first names in bill labels, names in account nicknames.
+  const realistic = () => {
+    const input = patelInput();
+    input.persons = input.persons.map(p => ({ ...p, displayName: `${p.displayName} Patel`, personaKey: p.displayName.toLowerCase() }));
+    input.obligations = input.obligations.map(o => (o.id === 103n ? { ...o, label: "Sam's car payment" } : o));
+    return input;
+  };
+
+  it('lets the question through and never blocks on names in bill labels', () => {
+    const http = fakeHttp([() => ({ status: 500, body: {} })]);
+    const s = newState('twin', buildSnapshot(realistic()), 'Can Priya and Sam afford a $3,200 Japan trip in March? Ask Mrs. Patel too.');
+    const out = runAgent(s, { http, primary: cfg, secondary: null });
+    expect(out.steps.some(x => x.step === 'pii_scan' && x.flagged)).toBe(false);
+    expect(http.sent).toHaveLength(1); // the request went out
+    const sent = JSON.stringify(http.sent[0]);
+    expect(sent).not.toMatch(/Priya|Sam\b|Maya|Patel/);
+    expect(sent).toContain('member A');
+    expect(sent).toContain('member B');
+  });
+
+  it('still blocks what cannot be redacted safely', () => {
+    const http = fakeHttp([() => ({ status: 500, body: {} })]);
+    const input = realistic();
+    input.goals = [{ ...input.goals[0], name: 'Fund 4417889921 escrow' }];
+    const s = newState('twin', buildSnapshot(input), 'Can we afford it?');
+    // Goal names with account-number-shaped text are dropped by the snapshot, so this still goes out clean.
+    runAgent(s, { http, primary: cfg, secondary: null });
+    expect(JSON.stringify(http.sent)).not.toContain('4417889921');
+  });
+});
+
+describe('big purchases (Ferrari report)', () => {
+  const rich = () => {
+    const input = patelInput();
+    input.accounts = input.accounts.map(a => (a.id === 10n ? { ...a, balanceCents: 500_000_000n } : a)); // $5M cash
+    return buildSnapshot(input);
+  };
+  it('a $10,000,000 purchase is not mistaken for an account number, and simulates', () => {
+    const http = fakeHttp([
+      () => ({ body: toolCall('simulate_scenario', { title: 'Ferrari', levers: [{ kind: 'one_time', amount: 10000000, date: '2026-12-01', label: 'Ferrari' }] }) }),
+      () => ({ body: final({ title: 'Ferrari', verdict: 'no', answer: 'No. Cash would fall to {sim_1.lowest_cash_after}.', tradeoffs: [], recommended_sim: 'sim_1' }) }),
+    ]);
+    const out = runAgent(newState('twin', rich(), 'Can I buy a ferrari worth 10000000?'), { http, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(out.result.answer).toMatch(/^No\. Cash would fall to -\$[\d,]+\.$/);
+  });
+  it('the rule-based answer reads the amount and says No when it is out of reach', () => {
+    const out = runAgent(newState('twin', rich(), 'Can I buy a Ferrari worth 10,000,000?'), { http: fakeHttp([]), primary: null, secondary: null });
+    expect(out.result.verdict).toBe('no');
+    expect(out.result.answer).toMatch(/^No\. At \$10,000,000 it costs more than/);
+  });
+  it('still blocks real account numbers', () => {
+    expect(scanOutbound('{"note":"wire it to account 12345678"}', []).ok).toBe(false);
+    expect(scanOutbound('{"note":"card 4111111111111111"}', []).ok).toBe(false);
+    expect(scanOutbound('{"note":"worth 10000000","amount":25000000}', []).ok).toBe(true);
+    expect(sanitizeUserText('Pay from account 12345678 a $10000000 car', new Map())).toBe('Pay from account [number] a $10000000 car');
+  });
+});
+
+describe('conversational coach with online prices (Rolex)', () => {
+  const ddg = (snippets: string[]) =>
+    `<html>${snippets.map((t, i) => `<tr><td><a rel="nofollow" href="//duckduckgo.com/l/?uddg=${encodeURIComponent(`https://shop${i}.example.com/rolex`)}&amp;rut=x" class='result-link'>Rolex prices ${i}</a></td></tr><tr><td class='result-snippet'>${t}</td></tr>`).join('')}</html>`;
+  const web = (url: string) => {
+    if (url.includes('lite.duckduckgo.com')) return { status: 200, text: () => (url.includes('under') ? ddg(['Pre-owned Rolex Oyster Perpetual from $6,643 and Datejust models around $9,500.']) : ddg(['Rolex watches cost around $14,000 on average, from $6,643 to $35,000 for popular steel models.'])) };
+    return { status: 200, text: () => '{}' }; // wikipedia: nothing useful
+  };
+
+  it('spending_budget is lowest 12-month cash minus buffer minus three months of essentials', () => {
+    const s = state('twin', 'x');
+    const b = executeTool(s, 'spending_budget', {}) as any;
+    expect(b.comfortable_budget).toBe(Math.max(0, Math.floor((s.baseline.minBalance12m - s.baseline.buffer - 3 * s.baseline.essentialMonthly) / 100) * 100));
+    expect(b.stretch_budget).toBeGreaterThanOrEqual(b.comfortable_budget);
+  });
+
+  it('looks up prices, checks the budget, suggests a cheaper fit, cites sources and asks a follow-up', () => {
+    const s = state('twin', 'I wanna buy a rolex');
+    const lev = (amount: number, label: string) => ({ kind: 'one_time', amount, date: '2026-11-20', label });
+    const model = fakeHttp([
+      () => ({ body: toolCall('lookup_information', { query: 'Rolex watch price' }) }),
+      () => ({ body: toolCall('spending_budget', {}) }),
+      () => ({ body: toolCall('simulate_scenario', { title: 'Rolex at typical price', levers: [lev(14000, 'Rolex')] }) }),
+      () => ({ body: toolCall('lookup_information', { query: 'Rolex under $10,000' }) }),
+      () => ({ body: toolCall('simulate_scenario', { title: 'Pre-owned Datejust', levers: [lev(9500, 'Pre-owned Rolex')] }) }),
+      () => ({
+        body: final({
+          title: 'A Rolex that fits', verdict: 'yes_with_tradeoffs',
+          answer: 'Rolex prices I found average about $14,000. You can comfortably spend about {budget.comfortable_budget} right now, so a pre-owned Datejust around $9,500 fits better.',
+          follow_up: 'Want me to look at pre-owned models around that price?',
+          recommended_sim: 'sim_1', alternative_sims: ['sim_2'],
+          sources: [{ title: 'x', url: 'https://shop0.example.com/rolex' }, { title: 'made up', url: 'https://not-returned.example.com' }],
+        }),
+      }),
+    ]);
+    // One client for everything, as in production: search URLs go to the fake web, the rest to the fake model.
+    const http = { fetch: (url: string, init: any) => (/duckduckgo|wikipedia/.test(url) ? web(url) : model.fetch(url, init)) };
+    const out = runAgent(s, { http, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(out.result.answer).toMatch(/comfortably spend about \$[\d,]+ right now/);
+    expect(out.result.followUp).toBe('Want me to look at pre-owned models around that price?');
+    expect(out.result.sources).toEqual([{ title: 'Rolex prices 0', url: 'https://shop0.example.com/rolex' }]); // only pages lookup returned
+    expect(out.result.scenarios.map(x => x.levers[0].amount)).toEqual([14000, 9500]);
+  });
+
+  it('asks for the price instead of guessing when nothing online states one', () => {
+    const model = fakeHttp([() => ({ body: final({ title: 'Which one?', verdict: 'not_yet', answer: "I couldn't find a price for that.", follow_up: 'What price range do you have in mind?' }) })]);
+    const out = runAgent(state('twin', 'I want a custom yacht'), { http: model, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(out.result.followUp).toBe('What price range do you have in mind?');
+  });
+});
+
+describe('asks before planning when the request is vague', () => {
+  it('rule-based: a vague multi-country trip gets questions, not a guessed budget', async () => {
+    const { clarifyQuestions } = await import('../intent');
+    const c = clarifyQuestions('Plan a trip to a couple countries in Africa and Asia', [])!;
+    expect(c.questions.length).toBeGreaterThanOrEqual(3);
+    expect(c.questions.join(' ')).toMatch(/Which countries/);
+    expect(c.questions.join(' ')).toMatch(/economy, business or first class/);
+    expect(c.questions.join(' ')).not.toMatch(/\$\d/);
+  });
+
+  it('rule-based: specific requests and single purchases go straight through', async () => {
+    const { clarifyQuestions } = await import('../intent');
+    expect(clarifyQuestions('Can we afford a $3,200 trip to Japan in March for 10 days, just the two of us, mid-range hotels?', [])).toBeNull();
+    expect(clarifyQuestions('I wanna buy a rolex', [])).toBeNull();
+    // Already asked once and answered: proceed.
+    expect(clarifyQuestions('Kenya and Thailand, two weeks in July, just me, mid-range', [{ question: 'Plan a trip', answer: 'Which countries?' }, { question: 'x', answer: 'y' }])).toBeNull();
+  });
+
+  it('Nemotron router: asks warm questions; rejects questions with invented figures', () => {
+    const ask = fakeHttp([() => ({ body: final({ workflow: 'life_event', request: 'Plan a multi-country trip', needs_clarification: true, message: "Love that idea! A few questions so the numbers are real:", questions: ['Which countries are you thinking of?', 'When and for how long?', 'Economy or business class, and what kind of hotels?'] }) })]);
+    const r = routeCoach('Plan a trip to a couple countries in Africa and Asia', [], new Map(), { http: ask, primary: cfg, secondary: null });
+    expect(r.clarify?.questions).toHaveLength(3);
+    expect(r.clarify?.message).toMatch(/^Love that idea/);
+
+    const invents = fakeHttp([() => ({ body: final({ workflow: 'life_event', request: 'x', needs_clarification: true, message: 'Sure!', questions: ['Is $8,000 your budget?', 'Is June good?'] }) })]);
+    const r2 = routeCoach('Plan a trip to a couple countries in Africa and Asia', [], new Map(), { http: invents, primary: cfg, secondary: null });
+    expect(r2.clarify?.questions.join(' ')).not.toMatch(/8,000/); // fell back to rule-based questions
+  });
+
+  it('when the member has answered, the router plans instead of asking again', () => {
+    const go = fakeHttp([() => ({ body: final({ workflow: 'life_event', request: 'Plan a two-week trip to Kenya and Thailand in July 2027, solo, mid-range hotels, economy flights', needs_clarification: false }) })]);
+    const r = routeCoach('Kenya and Thailand, two weeks in July, just me, mid-range and economy', [{ question: 'Plan a trip to a couple countries in Africa and Asia', answer: 'Which countries? When? How long?' }], new Map(), { http: go, primary: cfg, secondary: null });
+    expect(r.clarify).toBeUndefined();
+    expect(r.feature).toBe('life_event');
+  });
+});
+
+describe('asks at most once', () => {
+  it('after one round of questions it plans instead of asking again, even if the model wants to', () => {
+    const reAsk = fakeHttp([() => ({ body: final({ workflow: 'life_event', request: 'Plan a trip to Kenya and Vietnam', needs_clarification: true, message: 'Great!', questions: ['Which countries and cities are you considering?', 'How long?'] }) })]);
+    const history = [{ question: 'Plan a trip to a couple countries in Africa and Asia', answer: 'Happy to help! Which countries?', clarified: true }];
+    const r = routeCoach('Kenya and Vietnam', history, new Map(), { http: reAsk, primary: cfg, secondary: null });
+    expect(r.clarify).toBeUndefined();
+    expect(r.feature).toBe('life_event');
+    const rules = routeCoach('Kenya and Vietnam', history, new Map(), { http: reAsk, primary: null, secondary: null });
+    expect(rules.clarify).toBeUndefined();
+  });
+});
+
+describe('Reviewer agent', () => {
+  const draftThen = (reviewer: unknown) => fakeHttp([
+    () => ({ body: toolCall('simulate_scenario', { title: 'Trip in July', levers: [{ kind: 'one_time', amount: 3200, date: '2027-07-01', label: 'Japan trip' }] }) }),
+    () => ({ body: final({ title: 'Trip', verdict: 'yes', answer: 'Moving the trip to July delays the house goal by {sim_1.goal_1.shift_days} days.', tradeoffs: [], recommended_sim: 'sim_1' }) }),
+    () => ({ body: final(reviewer) }),
+  ]);
+
+  it('fixes framing errors the number check cannot see', () => {
+    const http = draftThen({ verdict: 'revise', issues: ['compares July against having no trip, not against March'], answer: 'A July trip costs the same as a March one; either way the house goal moves {sim_1.goal_1.shift_days} days later than with no trip.' });
+    const out = runAgent(state('twin', 'What if we did the Japan trip in July instead of March?'), { http, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(out.result.review?.verdict).toBe('revised');
+    expect(out.result.answer).toMatch(/^A July trip costs the same as a March one; either way the house goal moves \d+ days later than with no trip\.$/);
+    expect(http.sent[2].messages[0].content).toContain('You are the Reviewer');
+    expect(out.steps.some(s => s.step === 'review' && /revised/.test(s.detail))).toBe(true);
+  });
+
+  it("keeps the verified draft when the Reviewer's rewrite invents a number", () => {
+    const http = draftThen({ verdict: 'revise', issues: ['x'], answer: 'It will cost you $77,777.' });
+    const out = runAgent(state('twin', 'trip'), { http, primary: cfg, secondary: null });
+    expect(out.result.review?.verdict).toBe('skipped');
+    expect(out.result.answer).toMatch(/^Moving the trip to July delays the house goal by \d+ days\.$/);
+  });
+
+  it('approves sound answers and every result carries a 12-month baseline series for charts', () => {
+    const http = draftThen({ verdict: 'approve', issues: [] });
+    const out = runAgent(state('twin', 'trip'), { http, primary: cfg, secondary: null });
+    expect(out.result.review?.verdict).toBe('approved');
+    expect(out.result.baselineSeries!.length).toBe(53);
+    expect(out.result.scenarios[0].series!.length).toBe(53);
+  });
+});
+
+describe('Debate it (Advocate, Skeptic, Judge)', () => {
+  it('argues both sides from the simulation, drops unsupported points, and returns a verdict', async () => {
+    const { runDebate } = await import('../agent');
+    const http = fakeHttp([
+      () => ({ body: toolCall('simulate_scenario', { title: 'Car in March', levers: [{ kind: 'one_time', amount: 3500, date: '2027-03-01', label: 'Used car' }] }) }),
+      () => ({ body: final({ title: 'Car', verdict: 'yes_with_tradeoffs', answer: 'You can, with trade-offs.', tradeoffs: [], recommended_sim: 'sim_1' }) }),
+      () => ({ body: final({ points: ['Lowest cash stays at {sim_1.lowest_cash_after}, above your buffer.', 'It will make you $9,999,999 richer.'] }) }),
+      () => ({ body: final({ points: ['The house goal moves {sim_1.goal_1.shift_days} days later.'] }) }),
+      () => ({ body: final({ verdict: 'wait', answer: 'Waiting a few months keeps the house goal closer to on time.', follow_up: 'Want me to check a later date?' }) }),
+    ]);
+    const s = state('twin', 'Should we buy a $3,500 used car in March?');
+    const deps = { http, primary: cfg, secondary: null, skipReview: true };
+    const out = runAgent(s, deps);
+    const d = runDebate(s, out.result, deps);
+    expect(d.ok).toBe(true);
+    expect(out.result.kind).toBe('debate');
+    expect(out.result.verdict).toBe('wait');
+    const debate = out.result.extra!.debate as { for: string[]; against: string[] };
+    expect(debate.for).toEqual([expect.stringMatching(/^Lowest cash stays at \$[\d,]+, above your buffer\.$/)]); // invented point dropped
+    expect(debate.against[0]).toMatch(/moves \d+ days later/);
+    expect(s.steps.filter(x => x.step === 'debate').map(x => x.detail.split(':')[0])).toEqual(['Advocate', 'Skeptic', 'Judge']);
+  });
+});
+
+describe('decisions beyond the 60-day window', () => {
+  it('flags them so agents argue from the 12-month figures', () => {
+    const s = state('twin', 'x');
+    const soon = executeTool(s, 'simulate_scenario', { title: 'Laptop', levers: [{ kind: 'one_time', amount: 1500, date: '2026-11-14', label: 'Laptop' }] }) as any;
+    const later = executeTool(s, 'simulate_scenario', { title: 'Car', levers: [{ kind: 'one_time', amount: 35000, date: '2027-03-01', label: 'Car' }] }) as any;
+    expect(soon.decision_beyond_60_days).toBe(false);
+    expect(later.decision_beyond_60_days).toBe(true);
+    expect(later.lowest_cash_12_months_after).toBeLessThan(later.lowest_cash_12_months_before);
   });
 });

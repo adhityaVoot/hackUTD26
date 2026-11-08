@@ -1,3 +1,5 @@
+import {isMinor} from './accountPrivacy';
+import {simDayToIso} from './engine/calendar';
 import { t, type InferSchema, type ViewCtx } from 'spacetimedb/server';
 import type spacetimedb from './index';
 
@@ -132,6 +134,12 @@ export function canSee(ctx: Ctx, me: MemberRow, account: AccountRow): Visibility
     return allowed ? 'summary' : 'none';
   }
   if (me.personId !== 0n && account.ownerPersonId === me.personId) return 'full';
+  const viewer=ctx.db.person.id.find(me.personId);
+  if(me.kind!=='banker'&&viewer?.role==='coowner'){
+    const h=ctx.db.household.id.find(account.householdId);
+    const minor=isMinor(ctx.db.ageProfile.personId.find(account.ownerPersonId)?.birthDate,simDayToIso(h?.simDay??0));
+    return minor||!ctx.db.accountPrivacy.accountId.find(account.id)?.ownerAccessDisabled?'full':'none';
+  }
   const grant = activeGrants(ctx, account.id).find(row => grantApplies(ctx, me, row));
   if (!grant) return 'none';
   return levelOf(grant);
@@ -319,7 +327,7 @@ export function readMyForecast(ctx: Ctx) {
     if (canSee(ctx, me, account) === 'full') full.add(account.id);
   }
   return listed(ctx.db.forecastDay.householdId.filter(me.householdId)).filter(
-    row => allowed.has(row.scenarioId) && (row.accountId === 0n || full.has(row.accountId)),
+    row => allowed.has(row.scenarioId) && (row.accountId === 0n ? [...ctx.db.account.householdId.filter(me.householdId)].every(a=>full.has(a.id)) : full.has(row.accountId)),
   );
 }
 
@@ -330,7 +338,7 @@ export function readMyVitals(ctx: Ctx) {
   return listed(ctx.db.vital.householdId.filter(me.householdId)).filter(
     row =>
       allowed.has(row.scenarioId) &&
-      (row.scopePersonId === 0n || row.scopePersonId === me.personId),
+      (row.scopePersonId === me.personId || (row.scopePersonId === 0n && [...ctx.db.account.householdId.filter(me.householdId)].every(a=>canSee(ctx,me,a)==='full'))),
   );
 }
 

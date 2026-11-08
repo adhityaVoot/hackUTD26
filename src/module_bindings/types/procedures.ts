@@ -6,8 +6,11 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
+import * as SyncNessieDemoProcedure from "../sync_nessie_demo_procedure";
 import * as VerifyPinProcedure from "../verify_pin_procedure";
 
+export type SyncNessieDemoArgs = __Infer<typeof SyncNessieDemoProcedure.params>;
+export type SyncNessieDemoResult = __Infer<typeof SyncNessieDemoProcedure.returnType>;
 export type VerifyPinArgs = __Infer<typeof VerifyPinProcedure.params>;
 export type VerifyPinResult = __Infer<typeof VerifyPinProcedure.returnType>;
 

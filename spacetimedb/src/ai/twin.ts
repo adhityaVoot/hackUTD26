@@ -25,7 +25,7 @@ import type {
 export const FORECAST_DAYS = 60;
 export const GOAL_HORIZON_DAYS = 365 * 5;
 export const MAX_LEVER_DAYS = 365 * 2;
-export const MAX_LEVER_AMOUNT = 250_000;
+export const MAX_LEVER_AMOUNT = 1_000_000;
 const CRUNCH_THRESHOLD = 0.25;
 
 const LIQUID_KINDS = new Set(['checking', 'savings']);
@@ -88,11 +88,18 @@ function endHint(end: unknown, start: number): string {
   return `end_date ${e} must be after start_date ${dayToIso(start)}${nextYear ? `. Did you mean ${nextYear}?` : ''}`;
 }
 
-function amount(v: unknown, name: string, allowNegative = false): number {
+function amount(v: unknown, name: string, allowNegative = false, cap = MAX_LEVER_AMOUNT): number {
   const n = num(v, name);
   if (!allowNegative && n <= 0) throw new LeverError(`${name} must be positive`);
-  if (Math.abs(n) > MAX_LEVER_AMOUNT) throw new LeverError(`${name} exceeds the household limit`);
+  if (Math.abs(n) > cap) throw new LeverError(`${name} $${Math.round(Math.abs(n)).toLocaleString('en-US')} is beyond what this household could plausibly spend (limit $${Math.round(cap).toLocaleString('en-US')})`);
   return Math.round(n * 100) / 100;
+}
+
+/** Sanity cap for one amount: the larger of $1M and 20x (household cash + a year of income). */
+export function leverCap(data: TwinData): number {
+  const cash = data.accounts.filter(a => LIQUID_KINDS.has(a.kind)).reduce((t, a) => t + Math.max(0, a.balance), 0);
+  const yearIncome = data.obligations.filter(o => o.kind === 'income').reduce((t, o) => t + o.amount * perMonth(o.cadence) * 12, 0);
+  return Math.max(MAX_LEVER_AMOUNT, 20 * (cash + yearIncome));
 }
 
 export function cleanLabel(raw: unknown, fallback: string): string {
@@ -142,6 +149,7 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
     }
     return o;
   };
+  const cap = leverCap(data);
   const l = { ...(lever as Record<string, unknown>) };
   // Models mix up date field names; accept either.
   l.date ??= l.start_date;
@@ -158,7 +166,7 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
       return {
         ...base,
         label: cleanLabel(l.label, 'One-time item'),
-        amount: amount(l.amount, 'amount'),
+        amount: amount(l.amount, 'amount', false, cap),
         day: day(data, l.date, 'date'),
         from: typeof l.account === 'string' ? l.account : '',
         flowIn: l.flow === 'in',
@@ -175,7 +183,7 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
       return {
         ...base,
         label: cleanLabel(l.label, `${category} change`),
-        amount: amount(l.monthly_delta, 'monthly_delta', true),
+        amount: amount(l.monthly_delta, 'monthly_delta', true, cap),
         day: start,
         endDay: end,
         category,
@@ -190,7 +198,7 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
       const hasPct = l.percent !== undefined && l.percent !== null;
       const pct = hasPct ? num(l.percent, 'percent') : 0;
       if (hasPct && (pct < -100 || pct > 200)) throw new LeverError('percent must be between -100 and 200');
-      const delta = !hasPct ? amount(l.monthly_delta, 'monthly_delta', true) : 0;
+      const delta = !hasPct ? amount(l.monthly_delta, 'monthly_delta', true, cap) : 0;
       return {
         ...base,
         label: cleanLabel(l.label, 'Income change'),
@@ -209,7 +217,7 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
       return {
         ...base,
         label: cleanLabel(l.label, 'Transfer'),
-        amount: amount(l.amount, 'amount'),
+        amount: amount(l.amount, 'amount', false, cap),
         day: day(data, l.date, 'date'),
         from: from.token,
         to: to.token,
@@ -221,7 +229,7 @@ export function resolveLever(data: TwinData, lever: Lever): ResolvedLever {
       return {
         ...base,
         label: cleanLabel(l.label, 'Extra payment'),
-        amount: amount(l.amount, 'amount'),
+        amount: amount(l.amount, 'amount', false, cap),
         day: day(data, l.date, 'date'),
         to: loan.token,
       };
@@ -597,6 +605,18 @@ export function diff(before: TwinResult, after: TwinResult): TwinDiff {
 export function requiredMonthly(target: number, fromDay: number, byDay: number): number {
   const months = Math.max(1, (byDay - fromDay) / 30.4375);
   return round(target / months);
+}
+
+/** Expected household cash every `step` days for the next year, for charts. Starts with today's balance. */
+export function balanceSeries(data: TwinData, levers: ResolvedLever[] = [], days = 364, step = 7): { day: number; balance: number }[] {
+  let bal = data.accounts.filter(a => LIQUID_KINDS.has(a.kind)).reduce((s, a) => s + a.balance, 0);
+  const flows = dailyFlows(data, levers, days);
+  const out = [{ day: data.today, balance: Math.round(bal) }];
+  for (let i = 0; i < flows.length; i++) {
+    bal += flows[i].mean;
+    if ((i + 1) % step === 0) out.push({ day: data.today + i + 1, balance: Math.round(bal) });
+  }
+  return out;
 }
 
 /** Days until the expected household liquid balance first drops below zero, or -1. */

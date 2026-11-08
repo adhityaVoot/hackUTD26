@@ -70,6 +70,22 @@ describe('forecast', () => {
     expect([...fork.byAccount.entries()]).toEqual([...baseline.byAccount.entries()]);
   });
 
+  it('shows a $500 expense on the selected day throughout the 60-day forecast', () => {
+    const options = { paths: 40, seed: DEMO_SEED };
+    const baseline = runForecast(input, [], options);
+    const changed = runForecast(input, [{ kind: 'one_time', params: { accountId: 7, amount: -50_000, day: 10 } }], options);
+    expect(changed.days).toHaveLength(60);
+    const before = baseline.byAccount.get(7)!;
+    const after = changed.byAccount.get(7)!;
+    changed.days.forEach((day, index) => {
+      const delta = day < 10 ? 0 : -50_000;
+      expect(after.p50[index]).toBeCloseTo(before.p50[index] + delta, 3);
+      expect(after.p10[index]).toBeCloseTo(before.p10[index] + delta, 3);
+      expect(after.p90[index]).toBeCloseTo(before.p90[index] + delta, 3);
+      expect(after.pBelowBuffer[index]).toBeGreaterThanOrEqual(before.pBelowBuffer[index]);
+    });
+  });
+
   it('puts the joint checking crunch on day 27 and Maya under her buffer on day 12', () => {
     const started = Date.now();
     const result = runForecast(input, [], { paths: 300, seed: DEMO_SEED });

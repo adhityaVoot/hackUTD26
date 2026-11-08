@@ -7,8 +7,43 @@
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE = /(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/;
 const SSN = /\b\d{3}-\d{2}-\d{4}\b/;
-const ACCOUNT_NUMBER = /\b\d{8,19}\b/;
+const ACCOUNT_NUMBER = /\b\d{8,19}\b/g;
+const ACCOUNT_CONTEXT = /(account|acct|routing|card|iban|member\s*id|number|no\.?|#)\s*[:#-]?\s*$/i;
+const MONEY_BEFORE = /(\$|usd)\s*$/i;
+const MONEY_AFTER = /^\s*(dollars|bucks|usd)\b/i;
+
+/**
+ * Digit runs that look like account or card numbers. Money is not: "$10000000" or "worth 10000000"
+ * stays. 8-9 digits count only when introduced as an account/card/routing number; 10+ digits count
+ * unless marked as money.
+ */
+function accountNumbers(text: string): { index: number; length: number }[] {
+  const out: { index: number; length: number }[] = [];
+  for (const m of text.matchAll(ACCOUNT_NUMBER)) {
+    const i = m.index ?? 0;
+    const before = text.slice(Math.max(0, i - 24), i);
+    const after = text.slice(i + m[0].length, i + m[0].length + 10);
+    const money = MONEY_BEFORE.test(before) || MONEY_AFTER.test(after);
+    if (ACCOUNT_CONTEXT.test(before) || (m[0].length >= 10 && !money)) out.push({ index: i, length: m[0].length });
+  }
+  return out;
+}
+
+function redactAccountNumbers(text: string): string {
+  let s = text;
+  for (const r of accountNumbers(text).reverse()) s = `${s.slice(0, r.index)}[number]${s.slice(r.index + r.length)}`;
+  return s;
+}
 const HEX_ID = /\b[0-9a-f]{24}\b/i; // Nessie ids
+
+// Names that are also everyday words ("bill", "will", "may"): only the capitalized form counts as a name.
+const WORD_NAMES = new Set('bill will may june april august mark grace hope joy faith rose chase dawn sky max art ray sue pat rich penny sunny summer win wade jack bob'.split(' '));
+
+function nameRegex(n: string, flags: string, possessive = true): RegExp {
+  const word = WORD_NAMES.has(n.toLowerCase());
+  const body = word ? escapeRe(n[0].toUpperCase() + n.slice(1).toLowerCase()) : escapeRe(n);
+  return new RegExp(`\\b${body}${possessive ? "(?:['\u2019]s)?" : ''}\\b`, word ? flags.replace('i', '') : flags);
+}
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -21,15 +56,33 @@ export function sanitizeUserText(text: string, nameToToken: Map<string, string>,
     .replace(new RegExp(EMAIL.source, 'gi'), '[email]')
     .replace(new RegExp(SSN.source, 'g'), '[id]')
     .replace(new RegExp(PHONE.source, 'g'), '[phone]')
-    .replace(new RegExp(ACCOUNT_NUMBER.source, 'g'), '[number]');
-  // Longest names first so "Mary Ann" wins over "Mary".
+    ;
+  s = redactAccountNumbers(s);
+  return redactNames(s, nameToToken).replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Replaces every known name alias with its member token ("Priya", "Priya Patel", "priya" -> "member A").
+ * An alias shared by several members (a family surname) maps to '' and is removed. Words from account
+ * nicknames that could identify someone become "an account". Does not touch numbers, so it is safe on
+ * tool results and JSON.
+ */
+export function redactNames(text: string, nameToToken: Map<string, string>, properWords: string[] = []): string {
+  let s = text;
+  // Longest names first so "Priya Patel" wins over "Priya".
   const names = [...nameToToken.keys()].sort((a, b) => b.length - a.length);
   for (const n of names) {
     if (!n) continue;
     const tok = nameToToken.get(n)!;
-    s = s.replace(new RegExp(`\\b${escapeRe(n)}(?:'s)?\\b`, 'gi'), m => (m.toLowerCase().endsWith("'s") ? `member ${tok}'s` : `member ${tok}`));
+    s = s.replace(nameRegex(n, 'gi'), m => {
+      if (!tok) return '';
+      return /['\u2019]s$/i.test(m) ? `member ${tok}'s` : `member ${tok}`;
+    });
   }
-  return s.replace(/\s+/g, ' ').trim();
+  for (const w of properWords) {
+    if (w.length >= 3) s = s.replace(new RegExp(`\\b${escapeRe(w)}(?:['\u2019]s)?\\b`, 'g'), 'an account');
+  }
+  return s.replace(/ {2,}/g, ' ');
 }
 
 export interface ScanResult {
@@ -42,11 +95,13 @@ export function scanOutbound(payload: string, names: string[], properWords: stri
   if (EMAIL.test(payload)) return { ok: false, reason: 'email address in payload' };
   if (SSN.test(payload)) return { ok: false, reason: 'SSN-shaped value in payload' };
   if (PHONE.test(payload)) return { ok: false, reason: 'phone number in payload' };
-  if (ACCOUNT_NUMBER.test(payload)) return { ok: false, reason: 'account-number-shaped value in payload' };
+  // JSON numeric values are amounts the engine or model produced (e.g. "amount": 10000000), not identifiers.
+  const prose = payload.replace(/":\s*-?\d+(?:\.\d+)?/g, '":0');
+  if (accountNumbers(prose).length) return { ok: false, reason: 'account-number-shaped value in payload' };
   if (HEX_ID.test(payload)) return { ok: false, reason: 'bank identifier in payload' };
   for (const n of names) {
     if (n.length < 2) continue;
-    if (new RegExp(`\\b${escapeRe(n)}\\b`, 'i').test(payload)) return { ok: false, reason: 'a real name or nickname in payload' };
+    if (nameRegex(n, 'i', false).test(payload)) return { ok: false, reason: 'a real name or nickname in payload' };
   }
   for (const w of properWords) {
     if (new RegExp(`\\b${escapeRe(w)}\\b`).test(payload)) return { ok: false, reason: 'an account nickname in payload' };

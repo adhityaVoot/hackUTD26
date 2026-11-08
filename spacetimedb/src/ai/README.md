@@ -23,6 +23,24 @@ timer; each tick forecasts every household and starts a briefing (weekly) or a S
 Also: `share_insight(insightId)` (requester promotes a private answer to the household feed),
 `set_ai_enabled(enabled)` (co-owner kill switch), `seed_nemotron_demo(adminCode, householdId)` (demo decision log).
 
+## Multi-agent pipeline (what judges should look for)
+
+Every answer is a hand-off between Nemotron roles, visible in the UI as "How Nemotron worked this out":
+**Router** (understands the request, asks clarifying questions once if it is vague) → **Researcher**
+(`lookup_information`: web search with attributed prices) → **Analyst** (`spending_budget`,
+`simulate_scenario` on the deterministic engine) → **Writer** (drafts; code verifies every number,
+slot, direction and claim) → **Reviewer** (a second Nemotron call that checks the draft against the
+simulation facts for framing errors and rewrites it; a rewrite is used only if it passes the same checks).
+
+**Debate it** (`debate_decision(decision)`): after the Analyst simulates a decision, an **Advocate** and a
+**Skeptic** argue from the same facts and a **Judge** returns go / wait / skip with reasoning. Points
+that fail verification are dropped.
+
+**What-if lab** (frontend `NemotronLab.jsx`): buttons for Debate, Stress test, Ripple effect, Life event,
+Health check, Find savings and What's coming up. Each result shows a 12-month cash chart (baseline vs
+every simulated future, from `balanceSeries`), before/after chips, a feature view (ripple chain, vital
+cards, savings cards, cost table, for/against cards), sources, the Reviewer badge and the agent trace.
+
 ## How a request runs
 
 1. **Reducer** (deterministic): auth, rate limit (40/hour, 3 in flight per household), insert `ai_run`,

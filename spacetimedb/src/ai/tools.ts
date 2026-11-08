@@ -9,7 +9,7 @@ import { searchMemory, type MemoryItem, type MemoryRow } from './memory';
 import type { HttpLike, ToolSpec } from './model';
 import { findOpportunities, type Opportunity } from './opportunities';
 import { overviewForModel, type Snapshot } from './snapshot';
-import { diff, LeverError, requiredMonthly, resolveLever, simulate, SPEND_CATEGORIES, survivalDays } from './twin';
+import { balanceSeries, diff, LeverError, requiredMonthly, resolveLever, simulate, SPEND_CATEGORIES, survivalDays } from './twin';
 import type { AgentStep, FeatureKind, Lever, ResolvedLever, TwinDiff, TwinResult } from './types';
 
 export interface Sim {
@@ -20,6 +20,7 @@ export interface Sim {
   diff: TwinDiff;
   survivalDays: number;
   firstDay: number; // earliest lever day
+  series: { day: number; balance: number }[]; // weekly expected household cash, next 12 months
   cashOnFirstDayBefore: number | null; // expected household cash that day, null if beyond 60 days
   cashOnFirstDayAfter: number | null;
 }
@@ -45,6 +46,9 @@ export interface AgentState {
   lastSavings: Record<string, unknown> | null; // last required_monthly_savings result, for {savings.*} slots
   bank: BankLookup | null;
   http: HttpLike | null; // public lookup; household records are never sent through it
+  lastBudget: Record<string, unknown> | null; // last spending_budget result, for {budget.*} slots
+  sources: Map<string, string>; // url -> title for every page lookup_information returned
+  prices: { amount: number; context: string; source: string }[]; // price points lookup returned, for the Reviewer
 }
 
 export function newState(
@@ -73,6 +77,9 @@ export function newState(
     lastSavings: null,
     bank: null,
     http: null,
+    lastBudget: null,
+    sources: new Map(),
+    prices: [],
   };
 }
 
@@ -152,6 +159,15 @@ const ALL_TOOLS: Record<string, ToolSpec> = {
       },
     },
   },
+  spending_budget: {
+    type: 'function',
+    function: {
+      name: 'spending_budget',
+      description:
+        "How much the household can put toward a one-time purchase right now, from the deterministic forecast. comfortable_budget keeps three months of essential bills above the safety buffer for the next 12 months; stretch_budget only stays above the buffer. Use it to judge a price you found and to suggest a price range that fits.",
+      parameters: { type: 'object', properties: {} },
+    },
+  },
   required_monthly_savings: {
     type: 'function',
     function: {
@@ -202,8 +218,8 @@ const ALL_TOOLS: Record<string, ToolSpec> = {
 };
 
 const FEATURE_TOOLS: Record<FeatureKind, string[]> = {
-  twin: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'lookup_information', 'simulate_scenario', 'required_monthly_savings', 'check_bank'],
-  ripple: ['get_household_overview', 'get_forecast_summary', 'lookup_information', 'simulate_scenario'],
+  twin: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'lookup_information', 'spending_budget', 'simulate_scenario', 'required_monthly_savings', 'check_bank'],
+  ripple: ['get_household_overview', 'get_forecast_summary', 'lookup_information', 'spending_budget', 'simulate_scenario'],
   negotiation: ['get_household_overview', 'get_vitals', 'lookup_information', 'simulate_scenario', 'search_memory'],
   stress: ['get_household_overview', 'get_forecast_summary', 'lookup_information', 'simulate_scenario'],
   life_event: ['get_household_overview', 'get_forecast_summary', 'lookup_information', 'simulate_scenario', 'required_monthly_savings'],
@@ -212,6 +228,8 @@ const FEATURE_TOOLS: Record<FeatureKind, string[]> = {
   health: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'lookup_information', 'simulate_scenario', 'check_bank'],
   briefing: ['get_household_overview', 'get_forecast_summary', 'get_vitals', 'lookup_information', 'simulate_scenario', 'find_opportunities', 'check_bank'],
   coach: [],
+  clarify: [],
+  debate: [],
 };
 
 export function toolsFor(feature: FeatureKind): ToolSpec[] {
@@ -284,6 +302,7 @@ export function diffView(s: Sim) {
     monthly_surplus_after: d.monthlySurplusAfter,
     cash_runs_out_in_days: s.survivalDays < 0 ? 'not within 2 years' : s.survivalDays,
     decision_date: dayToLabel(s.firstDay),
+    decision_beyond_60_days: s.firstDay > (s.series[0]?.day ?? s.firstDay) + 60, // series starts today
     cash_on_decision_date_before: s.cashOnFirstDayBefore ?? 'beyond 60 days',
     cash_on_decision_date_after: s.cashOnFirstDayAfter ?? 'beyond 60 days',
     cushion_above_buffer_before: Math.round(d.minBalanceBefore - s.result.buffer),
@@ -339,6 +358,7 @@ export function runSim(state: AgentState, title: string, levers: Lever[]): { sim
     firstDay,
     cashOnFirstDayBefore: at(state.baseline.points),
     cashOnFirstDayAfter: at(result.points),
+    series: balanceSeries(state.snap.twin, resolved),
   };
   state.sims.set(simId, sim);
   return { sim, errors: [] };
@@ -347,6 +367,27 @@ export function runSim(state: AgentState, title: string, levers: Lever[]): { sim
 export function getOpportunities(state: AgentState): Opportunity[] {
   if (!state.opportunities) state.opportunities = findOpportunities(state.snap, state.baseline);
   return state.opportunities;
+}
+
+/**
+ * One-time spending room from the forecast. A purchase made now lowers every later balance by its
+ * cost, so the room is the lowest projected cash over 12 months minus what must stay untouched.
+ */
+export function spendingBudget(state: AgentState) {
+  const b = state.baseline;
+  const floor100 = (n: number) => Math.max(0, Math.floor(n / 100) * 100);
+  const keep = b.buffer + 3 * b.essentialMonthly;
+  const result = {
+    cash_now: Math.round(b.startLiquid),
+    lowest_cash_next_12_months: Math.round(b.minBalance12m),
+    safety_buffer: Math.round(b.buffer),
+    essential_bills_per_month: Math.round(b.essentialMonthly),
+    comfortable_budget: floor100(b.minBalance12m - keep),
+    stretch_budget: floor100(b.minBalance12m - b.buffer),
+    how: 'comfortable = lowest cash over 12 months - safety buffer - 3 months of essential bills; stretch = lowest cash - safety buffer',
+  };
+  state.lastBudget = result;
+  return { ...result, slot_hint: 'cite as {budget.comfortable_budget} or {budget.stretch_budget}' };
 }
 
 /** Live cross-check against the bank. Only tokens and amounts come back; payee text is dropped. */
@@ -453,8 +494,13 @@ export function executeTool(state: AgentState, name: string, rawArgs: string | R
     case 'lookup_information': {
       if (!state.http) return { available: false, note: 'Public lookup is not available in this run.' };
       const query = String(args.query ?? state.question);
-      return remember(state, lookupInformation(state.http, query));
+      const found = lookupInformation(state.http, query);
+      for (const p of found.passages) state.sources.set(p.url, p.title);
+      state.prices.push(...found.price_points);
+      return remember(state, found);
     }
+    case 'spending_budget':
+      return remember(state, spendingBudget(state));
     case 'check_bank':
       return remember(state, checkBank(state));
     default:
