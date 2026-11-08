@@ -1,4 +1,5 @@
 import { TimeDuration } from 'spacetimedb';
+import { SenderError } from 'spacetimedb/server';
 
 export interface PlaidHttp {
   fetch(url: string, init: { method: string; headers: Record<string, string>; body: string; timeout: ReturnType<typeof TimeDuration.fromMillis> }): { status: number; text(): string };
@@ -20,13 +21,13 @@ export function plaidRequest(http: PlaidHttp, credentials: PlaidCredentials, pat
       timeout: TimeDuration.fromMillis(20000),
     });
   } catch {
-    throw Error('Plaid could not be reached.');
+    throw new SenderError('Plaid could not be reached.');
   }
   const text = response.text();
   if (response.status < 200 || response.status >= 300) {
     let code = '';
     try { code = JSON.parse(text).error_code ?? ''; } catch { /* ignore */ }
-    throw Error(code ? `Plaid rejected the request (${code}).` : `Plaid returned HTTP ${response.status}.`);
+    throw new SenderError(code ? `Plaid rejected the request (${code}).` : `Plaid returned HTTP ${response.status}.`);
   }
   return JSON.parse(text);
 }

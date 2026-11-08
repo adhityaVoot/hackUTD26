@@ -1,4 +1,4 @@
-import { t } from 'spacetimedb/server';
+import { SenderError, t } from 'spacetimedb/server';
 import { envValue, requireMember } from '../auth';
 import { isoToSimDay } from '../engine/calendar';
 import { recomputeScenario } from '../recompute';
@@ -11,7 +11,7 @@ const PLATYPUS = 'ins_109508';
 function credentials(tx: { env: any }, mode: 'sandbox' | 'production'): PlaidCredentials {
   const clientId = envValue(tx as any, 'PLAID_CLIENT_ID');
   const secret = envValue(tx as any, mode === 'sandbox' ? 'PLAID_SANDBOX_SECRET' : 'PLAID_SECRET');
-  if (!clientId || !secret) throw Error(mode === 'sandbox' ? 'Sandbox banking is not configured.' : 'Bank connection is not configured.');
+  if (!clientId || !secret) throw new SenderError(mode === 'sandbox' ? 'Sandbox banking is not configured.' : 'Bank connection is not configured.');
   return { clientId, secret, host: mode };
 }
 
@@ -45,7 +45,7 @@ function rememberItem(tx: any, me: ReturnType<typeof requireMember>, itemId: str
 }
 
 function writeAccounts(tx: any, me: ReturnType<typeof requireMember>, institutionName: string, accounts: any[], transactions: any[]) {
-  if (!Array.isArray(accounts) || accounts.length > 20) throw Error('Unexpected Plaid account response');
+  if (!Array.isArray(accounts) || accounts.length > 20) throw new SenderError('Unexpected Plaid account response');
   let count = 0;
   const localIds = new Map<string, bigint>();
   for (const account of accounts) {
@@ -54,7 +54,7 @@ function writeAccounts(tx: any, me: ReturnType<typeof requireMember>, institutio
     if (!kind || account.balances?.iso_currency_code && account.balances.iso_currency_code !== 'USD' || typeof account.account_id !== 'string' || typeof current !== 'number') continue;
     const nessieId = `plaid:${account.account_id}`;
     let local = [...tx.db.account.iter()].find((row: any) => row.nessieId === nessieId);
-    if (local && (local.ownerPersonId !== me.person.id || local.householdId !== me.household.id || local.isJoint)) throw Error('Bank account already belongs to another member');
+    if (local && (local.ownerPersonId !== me.person.id || local.householdId !== me.household.id || local.isJoint)) throw new SenderError('Bank account already belongs to another member');
     const balanceCents = plaidBalanceCents(current);
     const nickname = `${institutionName} · ${String(account.name ?? kind)}`.slice(0, 80);
     if (local) {
@@ -91,7 +91,7 @@ export function registerPlaid(db: typeof database) {
     const http: PlaidHttp = { fetch: (url, init) => ctx.http.fetch(url, init) };
     const setup = ctx.withTx(tx => {
       const me = requireMember(tx);
-      if (me.household.inviteCode !== DEMO_INVITE_CODE) throw Error('Sandbox bank data is only for the demo household.');
+      if (me.household.inviteCode !== DEMO_INVITE_CODE) throw new SenderError('Sandbox bank data is only for the demo household.');
       const existing = [...tx.db.plaidItem.ownerPersonId.filter(me.person.id)].find(row => row.householdId === me.household.id && row.environment === 'sandbox');
       return { credentials: credentials(tx, 'sandbox'), personId: me.person.id, householdId: me.household.id, accessToken: existing?.accessToken ?? '', itemId: existing?.itemId ?? '' };
     });
@@ -102,13 +102,13 @@ export function registerPlaid(db: typeof database) {
       const exchanged = plaidRequest(http, setup.credentials, '/item/public_token/exchange', { public_token: created.public_token });
       accessToken = String(exchanged.access_token ?? '');
       itemId = String(exchanged.item_id ?? '');
-      if (!accessToken || !itemId) throw Error('Plaid did not return a sandbox connection.');
+      if (!accessToken || !itemId) throw new SenderError('Plaid did not return a sandbox connection.');
     }
     const listed = plaidRequest(http, setup.credentials, '/accounts/get', { access_token: accessToken });
     const transactions = postedTransactions(http, setup.credentials, accessToken);
     return ctx.withTx(tx => {
       const me = requireMember(tx);
-      if (me.person.id !== setup.personId || me.household.id !== setup.householdId) throw Error('Household membership changed. Retry.');
+      if (me.person.id !== setup.personId || me.household.id !== setup.householdId) throw new SenderError('Household membership changed. Retry.');
       rememberItem(tx, me, itemId, accessToken, 'sandbox', 'First Platypus Bank');
       return writeAccounts(tx, me, 'First Platypus Bank', listed.accounts, transactions);
     });
@@ -118,14 +118,14 @@ export function registerPlaid(db: typeof database) {
     const http: PlaidHttp = { fetch: (url, init) => ctx.http.fetch(url, init) };
     const setup = ctx.withTx(tx => {
       const me = requireMember(tx);
-      if (me.household.inviteCode === DEMO_INVITE_CODE) throw Error('This demo household loads sandbox bank data directly.');
+      if (me.household.inviteCode === DEMO_INVITE_CODE) throw new SenderError('This demo household loads sandbox bank data directly.');
       return { credentials: credentials(tx, 'production'), personId: me.person.id };
     });
     const created = plaidRequest(http, setup.credentials, '/link/token/create', {
       client_name: 'Tandem', language: 'en', country_codes: ['US'],
       user: { client_user_id: String(setup.personId) }, products: ['transactions'],
     });
-    if (typeof created.link_token !== 'string' || !created.link_token) throw Error('Plaid did not return a link token.');
+    if (typeof created.link_token !== 'string' || !created.link_token) throw new SenderError('Plaid did not return a link token.');
     return created.link_token;
   });
 
@@ -134,19 +134,19 @@ export function registerPlaid(db: typeof database) {
     const name = institutionName.trim().slice(0, 60) || 'Bank';
     const setup = ctx.withTx(tx => {
       const me = requireMember(tx);
-      if (me.household.inviteCode === DEMO_INVITE_CODE) throw Error('This demo household loads sandbox bank data directly.');
-      if (!publicToken.startsWith('public-production-')) throw Error('That bank login cannot be used for this household.');
+      if (me.household.inviteCode === DEMO_INVITE_CODE) throw new SenderError('This demo household loads sandbox bank data directly.');
+      if (!publicToken.startsWith('public-production-')) throw new SenderError('That bank login cannot be used for this household.');
       return { credentials: credentials(tx, 'production'), personId: me.person.id, householdId: me.household.id };
     });
     const exchanged = plaidRequest(http, setup.credentials, '/item/public_token/exchange', { public_token: publicToken });
     const accessToken = String(exchanged.access_token ?? '');
     const itemId = String(exchanged.item_id ?? '');
-    if (!accessToken || !itemId) throw Error('Plaid did not return a bank connection.');
+    if (!accessToken || !itemId) throw new SenderError('Plaid did not return a bank connection.');
     const listed = plaidRequest(http, setup.credentials, '/accounts/get', { access_token: accessToken });
     const transactions = postedTransactions(http, setup.credentials, accessToken);
     return ctx.withTx(tx => {
       const me = requireMember(tx);
-      if (me.person.id !== setup.personId || me.household.id !== setup.householdId) throw Error('Household membership changed. Retry.');
+      if (me.person.id !== setup.personId || me.household.id !== setup.householdId) throw new SenderError('Household membership changed. Retry.');
       rememberItem(tx, me, itemId, accessToken, 'production', name);
       return writeAccounts(tx, me, name, listed.accounts, transactions);
     });
