@@ -663,6 +663,7 @@ export const renewGrant = spacetimedb.reducer(
 export const {
   askCoach,
   debateDecision,
+  proposeAgentPlan,
   requestHealthCheck,
   requestBriefing,
   startNemotronWatch,

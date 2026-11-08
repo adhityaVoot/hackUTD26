@@ -255,3 +255,23 @@ describe('coach clarifying questions (module)', () => {
     expect(store.rows('scenario')).toHaveLength(0);
   });
 });
+
+describe('agent plans become real proposals', () => {
+  it('an engine-compatible agent draft is marked proposable and its member can propose it', () => {
+    (mod.askTwin as any)(reducerCtx(PRIYA), { question: 'Can we afford a $3,200 Japan trip in March?' });
+    runJobs(scripted([
+      () => toolCall('simulate_scenario', { title: 'Japan trip in March', levers: [{ kind: 'one_time', amount: 3200, date: '2027-03-01', label: 'Japan trip' }] }),
+      () => final({ title: 'Japan trip', verdict: 'yes', answer: 'Yes, comfortably.', tradeoffs: [], recommended_sim: 'sim_1' }),
+    ]));
+    const r = JSON.parse(store.rows('aiInsight')[0].resultJson);
+    expect(r.scenarios[0].proposable).toBe(true);
+    const id = BigInt(r.scenarios[0].scenarioId);
+    const change = JSON.parse(store.rows('scenarioChange').find((c: any) => c.scenarioId === id).paramsJson);
+    expect(change).toMatchObject({ amount: -320000, day: expect.any(Number) }); // engine contract: signed cents
+    expect(() => (mod.proposeAgentPlan as any)(reducerCtx(SAM), { scenarioId: id })).toThrow(/not found/); // Priya's private plan
+    (mod.proposeAgentPlan as any)(reducerCtx(PRIYA), { scenarioId: id });
+    const sc = store.rows('scenario').find((x: any) => x.id === id);
+    expect(sc.authorPersonId).toBe(PRIYA);
+    expect(sc.status).not.toBe('draft');
+  });
+});

@@ -162,6 +162,9 @@
     "request_briefing": [],
     "debate_decision": [
       "decision"
+    ],
+    "propose_agent_plan": [
+      "scenarioId"
     ]
   },
   "views": [

@@ -59,3 +59,24 @@
 .lab-verdict{grid-column:1/-1;display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:12px;background:rgba(99,102,241,.15)}
 .lab-verdict.go{background:rgba(16,185,129,.18)}.lab-verdict.skip{background:rgba(239,68,68,.15)}
 @media (max-width:640px){.lab-debate{grid-template-columns:1fr}}
+
+/* Ask Nemotron studio */
+.nemotron-studio{display:flex;flex-direction:column;gap:10px}
+.studio-modes{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.studio-modes button{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;border:1px solid rgba(127,127,127,.35);background:transparent;color:inherit;cursor:pointer;font-size:.86rem}
+.studio-modes button.active{background:rgba(99,102,241,.18);border-color:rgba(99,102,241,.6);font-weight:600}
+.studio-modes .studio-quick{border-style:dashed}
+.studio-sep{width:1px;height:20px;background:rgba(127,127,127,.35);margin:0 4px}
+.studio-feed{display:flex;flex-direction:column;gap:10px;max-height:620px;overflow-y:auto;padding:4px 2px}
+.studio-empty p{margin:0 0 6px;opacity:.75}
+.studio-input{display:flex;flex-direction:column;gap:6px}
+.studio-input textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:52px;padding:10px 12px;border-radius:12px;border:1px solid rgba(127,127,127,.35);background:transparent;color:inherit;font:inherit}
+.studio-actions{display:flex;justify-content:flex-end;gap:8px;align-items:center}
+.studio-actions .coach-new{display:inline-flex;align-items:center;gap:4px}
+.nemotron-studio .coach-user{align-self:flex-end;max-width:85%}
+.lab-propose{display:flex;flex-wrap:wrap;gap:6px}
+.lab-propose-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;border:1px solid rgba(16,185,129,.6);background:rgba(16,185,129,.12);color:inherit;cursor:pointer;font-size:.84rem}
+.lab-propose-btn:disabled{opacity:.7;cursor:default}
+.plan-bridge{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.plan-bridge span{opacity:.8;font-size:.9rem}
+.plan-bridge button{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;border:1px solid rgba(99,102,241,.5);background:rgba(99,102,241,.1);color:inherit;cursor:pointer;font-size:.85rem}

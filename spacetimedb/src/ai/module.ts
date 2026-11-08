@@ -17,6 +17,7 @@ import { envValue, requireAdmin, requireMember, type Ctx } from '../auth';
 import { runAgent } from './agent';
 import { DISCLAIMER } from './prompts';
 import { recomputeScenario } from '../recompute';
+import { proposeScenario } from '../futures';
 import { DEFAULT_BASE_URL, DEFAULT_MODEL, type HttpLike, type ModelConfig } from './model';
 import { buildSnapshot, type SnapshotInput, type Snapshot } from './snapshot';
 import type { MemoryRow } from './memory';
@@ -331,7 +332,11 @@ function leverParams(l: ResolvedLever, snap: Snapshot): string {
     ? { amount: Math.round(l.amount * 100) * (l.flowIn ? 1 : -1), accountId: Number(id(snap.map.accounts, funding)), fundingAssumption: l.from ? '' : 'Uses the first available shared cash account, otherwise your first full-access cash account.' }
     : l.kind === 'transfer' ? { amount: Math.round(l.amount * 100), fromAccountId: Number(id(snap.map.accounts,l.from)), toAccountId: Number(id(snap.map.accounts,l.to)) }
     : l.kind === 'extra_payment' ? { amount: Math.round(l.amount * 100), fromAccountId: Number(id(snap.map.accounts,funding)), loanAccountId: Number(id(snap.map.accounts,l.to)) }
-    : l.kind === 'move_obligation' ? { obligationId: Number(id(snap.map.obligations,l.from)), newDay: l.day } : {};
+    : l.kind === 'move_obligation' ? { obligationId: Number(id(snap.map.obligations,l.from)), newDay: l.day }
+    // The engine replaces a category's monthly spend; the agent works in deltas, so convert to the new total.
+    : l.kind === 'recurring_change' ? { category: l.category, accountId: Number(id(snap.map.accounts, funding)), startDay: l.day, ...(l.endDay > 0 ? { endDay: l.endDay } : {}),
+        newMonthly: Math.max(0, Math.round(((snap.twin.spending.find(c => c.category === l.category)?.dailyMean ?? 0) * 30.4375 + l.amount) * 100)) }
+    : {};
   return JSON.stringify({
     amountCents: Math.round(l.amount * 100),
     day: l.day,
@@ -345,6 +350,13 @@ function leverParams(l: ResolvedLever, snap: Snapshot): string {
     personId: id(snap.map.members, l.from),
     ...engineParams,
   });
+}
+
+/** True when the engine can run (and the family can co-sign) this change exactly as the agent simulated it. */
+const ENGINE_ONE_TIME_LIMIT = 50_000; // dollars, engine/levers.ts MAX_ONE_TIME_CENTS
+function engineReady(l: ResolvedLever): boolean {
+  if (!['one_time', 'recurring_change', 'transfer', 'extra_payment', 'move_obligation'].includes(l.kind)) return false;
+  return !(l.kind === 'one_time' && l.amount > ENGINE_ONE_TIME_LIMIT);
 }
 
 // ---------- Registration ----------
@@ -488,6 +500,22 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
     }
     const ins = enqueue(ctx, me, 'coach', cleanText(message, 'message'), me.person.id, threadId ? { threadId } : {});
     if (!threadId) ctx.db.aiInsight.id.update({ ...ins, contextJson: JSON.stringify({ threadId: String(ins.id) }) });
+  });
+
+  /**
+   * Turn an agent's draft plan into a real proposal: the member it was made for adopts it as author,
+   * then the normal Two-Key flow takes over (co-owners still verify their PIN and vote).
+   */
+  const proposeAgentPlan = spacetimedb.reducer({ scenarioId: t.u64() }, (ctx, { scenarioId }) => {
+    const me = requireMember(ctx);
+    const sc = ctx.db.scenario.id.find(scenarioId);
+    if (!sc || sc.householdId !== me.household.id || !sc.agentKind || sc.status !== 'draft') throw new SenderError('Plan not found');
+    if (sc.audiencePersonId !== 0n && sc.audiencePersonId !== me.person.id) throw new SenderError('Plan not found');
+    if (sc.authorPersonId !== 0n && sc.authorPersonId !== me.person.id) throw new SenderError('Someone else already adopted this plan');
+    const changes = [...ctx.db.scenarioChange.scenarioId.filter(scenarioId)];
+    if (!changes.length) throw new SenderError('This plan has no changes to propose');
+    ctx.db.scenario.id.update({ ...sc, authorPersonId: me.person.id });
+    proposeScenario(ctx, scenarioId);
   });
 
   /** Debate it: Advocate vs Skeptic on a decision, then a Judge's verdict. */
@@ -667,7 +695,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
 
       const publicResult = humanize({
         ...result,
-        scenarios: result.scenarios.map(d => ({ simId: d.simId, scenarioId: scenarioIds[d.simId] ?? '', title: d.title, changes: d.levers.map(describeLever), diff: d.diff, series: d.series })),
+        scenarios: result.scenarios.map(d => ({ simId: d.simId, scenarioId: scenarioIds[d.simId] ?? '', title: d.title, changes: d.levers.map(describeLever), diff: d.diff, series: d.series, proposable: !!scenarioIds[d.simId] && d.levers.every(engineReady) })),
       });
       const firstScenario = result.scenarios[0] ? BigInt(scenarioIds[result.scenarios[0].simId] ?? '0') : 0n;
 
@@ -749,6 +777,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
   return {
     askCoach,
     debateDecision,
+    proposeAgentPlan,
     requestHealthCheck,
     requestBriefing,
     startNemotronWatch,
