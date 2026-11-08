@@ -8,7 +8,7 @@ import { lookupInformation, priceFromPassages } from './lookup';
 import { DISCLAIMER } from './prompts';
 import { describeLever, diffView, forecastSummary, getOpportunities, runSim, type AgentState, type Sim } from './tools';
 import { searchMemory } from './memory';
-import { requiredMonthly } from './twin';
+import { GOAL_HORIZON_DAYS, requiredMonthly } from './twin';
 import type { FeatureKind, Highlight, InsightResult, ScenarioDraft, TwinDiff } from './types';
 
 const $ = (n: number) => `${n < 0 ? '-' : ''}$${Math.round(Math.abs(n)).toLocaleString('en-US')}`;
@@ -362,7 +362,7 @@ function summaryLine(s: Sim): string {
   const d = s.diff;
   const goal = d.goals.find(g => g.shiftDays !== 0);
   const parts = [`lowest cash ${$(d.minBalanceAfter)}`, `overdraft risk ${d.crunchAfter}%`];
-  if (goal) parts.push(`${goal.name} ${goal.shiftDays > 0 ? `${goal.shiftDays} days later` : `${-goal.shiftDays} days sooner`}`);
+  if (goal) parts.push(`${goal.name} ${goal.shiftDays >= GOAL_HORIZON_DAYS ? 'out of reach within 5 years' : goal.shiftDays > 0 ? `${goal.shiftDays} days later` : `${-goal.shiftDays} days sooner`}`);
   return parts.join(', ');
 }
 
@@ -391,7 +391,7 @@ export function engineChain(s: Sim): { step: string; area: string; severity: str
     out.push({ step: `Overdraft risk goes from ${d.crunchBefore}% to ${d.crunchAfter}% (riskiest day ${d.crunchDayAfter}).`, area: 'risk', severity: d.crunchAfter > 25 ? 'high' : d.crunchAfter > 10 ? 'medium' : 'low' });
   }
   for (const g of d.goals.filter(x => x.shiftDays !== 0)) {
-    out.push({ step: `${g.name} ${g.shiftDays > 0 ? `slips ${g.shiftDays} days` : `arrives ${-g.shiftDays} days sooner`}: ${g.beforeEta} to ${g.afterEta}.`, area: 'goal', severity: g.shiftDays > 90 ? 'high' : 'medium' });
+    out.push({ step: `${g.name} ${g.shiftDays >= GOAL_HORIZON_DAYS ? 'moves out of reach within 5 years' : g.shiftDays > 0 ? `slips ${g.shiftDays} days` : `arrives ${-g.shiftDays} days sooner`}: ${g.beforeEta} to ${g.afterEta}.`, area: 'goal', severity: g.shiftDays > 90 ? 'high' : 'medium' });
   }
   for (const v of d.vitals.filter(x => x.direction !== 'same' && !['crunch_risk', 'goal_track'].includes(x.key))) {
     out.push({ step: `${VITAL_LABEL[v.key]} ${v.direction === 'worse' ? 'weakens' : 'improves'}: ${v.before} to ${v.after}.`, area: 'vital', severity: v.direction === 'worse' ? 'medium' : 'low' });
@@ -421,14 +421,20 @@ export function fallback(state: AgentState, reason: string): InsightResult {
         if (lever.kind === 'one_time') lever = { ...lever, amount: price };
         sourceNote = found.passages[0] ? ` Using ${$(price)} from ${found.passages[0].title}.` : '';
       }
-      const { sim } = runSim(state, shortLabel(q), [lever]);
-      if (!sim) return base(state, defaultTitle(state.feature), 'I could not turn that into a scenario. Try including an amount and a month.', 'fallback');
+      const { sim, errors } = runSim(state, shortLabel(q), [lever]);
+      if (!sim) {
+        const why = errors.join('; ').replace(/^lever 1: /, '');
+        return base(state, defaultTitle(state.feature), `I could not simulate that: ${why}. Try rephrasing with an amount and a month.`, 'fallback');
+      }
       const d = sim.diff;
       const worseBand = d.vitals.some(v => v.direction === 'worse' && sim.result.vitals.find(x => x.key === v.key)!.band !== state.baseline.vitals.find(x => x.key === v.key)!.band);
       const breach = !!d.bufferBreachDay;
       const goalSlip = d.goals.some(g => g.shiftDays > 30);
       if (state.feature === 'twin') {
-        const verdict = breach ? 'not_yet' : worseBand || goalSlip ? 'yes_with_tradeoffs' : 'yes';
+        // Out of reach: costs more than all household cash plus two years of surplus.
+        const reach = state.baseline.startLiquid + 24 * Math.max(0, state.baseline.monthlySurplus);
+        const outOfReach = breach && lever.kind === 'one_time' && lever.amount > reach;
+        const verdict = outOfReach ? 'no' : breach ? 'not_yet' : worseBand || goalSlip ? 'yes_with_tradeoffs' : 'yes';
         const r = base(state, sim.title, '', 'fallback');
         r.verdict = verdict;
         r.answer =
@@ -436,7 +442,9 @@ export function fallback(state: AgentState, reason: string): InsightResult {
             ? `Yes. ${sim.title} keeps lowest household cash at ${$(d.minBalanceAfter)} and overdraft risk at ${d.crunchAfter}%.${sourceNote}`
             : verdict === 'yes_with_tradeoffs'
               ? `You can, with trade-offs: ${summaryLine(sim)}.${sourceNote}`
-              : `Not yet. Household cash would fall below the buffer on ${d.bufferBreachDay}. ${summaryLine(sim)}.${sourceNote}`;
+              : verdict === 'no'
+                ? `No. At ${$(lever.kind === 'one_time' ? lever.amount : 0)} it costs more than the household's ${$(state.baseline.startLiquid)} in cash plus two years of savings, and cash would go negative (${$(d.minBalanceAfter)}).${sourceNote}`
+                : `Not yet. Household cash would fall below the buffer on ${d.bufferBreachDay}. ${summaryLine(sim)}.${sourceNote}`;
         if (breach && lever.kind === 'one_time') {
           const later = runSim(state, `${sim.title}, saved up first`, [{ ...lever, date: laterDate(state, lever.amount) }]).sim;
           if (later) {

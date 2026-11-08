@@ -5,13 +5,26 @@ import { dayToDate, dayToIso, isoToDay, monthIndexIn } from './dates';
 import type { Lever, TwinData } from './types';
 
 export function parseMoney(text: string): number | null {
+  // "$10M", "10m", "10 mil", "2.5 mm"
+  const short = /\$?\s?(\d+(?:\.\d+)?)\s*(m|mm|mil|million|b|bn|billion)\b/i.exec(text);
+  if (short) {
+    const mult = /^b/i.test(short[2]) ? 1_000_000_000 : 1_000_000;
+    const n = Number(short[1]) * mult;
+    if (Number.isFinite(n) && n > 0) return Math.round(n);
+  }
   const million = /\$?\s?(\d+(?:\.\d+)?)\s*million(?:\s+dollars)?\b/i.exec(text);
   if (million) {
     const n = Number(million[1]) * 1_000_000;
     if (Number.isFinite(n) && n > 0) return Math.round(n);
   }
   const m = /\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k|thousand)?/i.exec(text) ?? /(\d[\d,]*(?:\.\d+)?)\s*(k|thousand|dollars|bucks)\b/i.exec(text);
-  if (!m) return null;
+  if (!m) {
+    // "worth 10,000,000", "costs 45000", "for 1,200": a bare number after a money word.
+    const bare = /\b(?:worth|costs?|costing|price[sd]?|priced at|for|spend(?:ing)?|pay(?:ing)?|budget(?:ed)?|about|around|roughly|of)\s+(\d{1,3}(?:,\d{3})+|\d{3,})(?:\.\d+)?\b/i.exec(text);
+    if (!bare) return null;
+    const n = Number(bare[1].replace(/,/g, ''));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
   let n = Number(m[1].replace(/,/g, ''));
   if (m[2] && /^(k|thousand)$/i.test(m[2])) n *= 1000;
   return Number.isFinite(n) && n > 0 ? n : null;

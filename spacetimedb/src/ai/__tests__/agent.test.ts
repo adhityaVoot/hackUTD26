@@ -1,6 +1,7 @@
 // Drives the full agent loop with a scripted fake Nemotron endpoint.
 import { describe, expect, it } from 'vitest';
 import { runAgent } from '../agent';
+import { sanitizeUserText, scanOutbound } from '../gateway';
 import type { ChatMessage, HttpLike, ModelConfig } from '../model';
 import { buildSnapshot } from '../snapshot';
 import { executeTool, newState } from '../tools';
@@ -355,5 +356,33 @@ describe('names in real household data (NemoTrial)', () => {
     // Goal names with account-number-shaped text are dropped by the snapshot, so this still goes out clean.
     runAgent(s, { http, primary: cfg, secondary: null });
     expect(JSON.stringify(http.sent)).not.toContain('4417889921');
+  });
+});
+
+describe('big purchases (Ferrari report)', () => {
+  const rich = () => {
+    const input = patelInput();
+    input.accounts = input.accounts.map(a => (a.id === 10n ? { ...a, balanceCents: 500_000_000n } : a)); // $5M cash
+    return buildSnapshot(input);
+  };
+  it('a $10,000,000 purchase is not mistaken for an account number, and simulates', () => {
+    const http = fakeHttp([
+      () => ({ body: toolCall('simulate_scenario', { title: 'Ferrari', levers: [{ kind: 'one_time', amount: 10000000, date: '2026-12-01', label: 'Ferrari' }] }) }),
+      () => ({ body: final({ title: 'Ferrari', verdict: 'no', answer: 'No. Cash would fall to {sim_1.lowest_cash_after}.', tradeoffs: [], recommended_sim: 'sim_1' }) }),
+    ]);
+    const out = runAgent(newState('twin', rich(), 'Can I buy a ferrari worth 10000000?'), { http, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(out.result.answer).toMatch(/^No\. Cash would fall to -\$[\d,]+\.$/);
+  });
+  it('the rule-based answer reads the amount and says No when it is out of reach', () => {
+    const out = runAgent(newState('twin', rich(), 'Can I buy a Ferrari worth 10,000,000?'), { http: fakeHttp([]), primary: null, secondary: null });
+    expect(out.result.verdict).toBe('no');
+    expect(out.result.answer).toMatch(/^No\. At \$10,000,000 it costs more than/);
+  });
+  it('still blocks real account numbers', () => {
+    expect(scanOutbound('{"note":"wire it to account 12345678"}', []).ok).toBe(false);
+    expect(scanOutbound('{"note":"card 4111111111111111"}', []).ok).toBe(false);
+    expect(scanOutbound('{"note":"worth 10000000","amount":25000000}', []).ok).toBe(true);
+    expect(sanitizeUserText('Pay from account 12345678 a $10000000 car', new Map())).toBe('Pay from account [number] a $10000000 car');
   });
 });
