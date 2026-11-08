@@ -331,12 +331,11 @@ function dailyFlows(data: TwinData, levers: ResolvedLever[], horizon: number): D
           if (l.percent === 0 && active(l, d)) mean += l.amount / 30.4375;
           break;
         case 'extra_payment':
-          if (d === l.day) mean -= l.amount;
-          break;
         case 'transfer': {
-          if (d !== l.day) break;
-          const toLiquid = liquid.has(l.to);
-          if (!toLiquid) mean -= l.amount; // paying down a card/loan leaves household cash
+          if (l.kind === 'transfer' && liquid.has(l.to)) break; // between the household's own cash accounts
+          // Paying down a card or loan leaves household cash on the day, then saves its interest every day after.
+          if (d === l.day) mean -= l.amount;
+          else if (d > l.day) mean += interestPerDay(data, l);
           break;
         }
         default:
@@ -346,6 +345,11 @@ function dailyFlows(data: TwinData, levers: ResolvedLever[], horizon: number): D
     out.push({ mean, variance });
   }
   return out;
+}
+
+function interestPerDay(data: TwinData, l: ResolvedLever): number {
+  const debt = data.accounts.find(a => a.token === l.to);
+  return debt && DEBT_KINDS.has(debt.kind) ? (Math.min(l.amount, debt.balance) * debt.aprPct) / 100 / 365 : 0;
 }
 
 function normCdf(x: number): number {
@@ -464,6 +468,8 @@ export function simulate(data: TwinData, levers: ResolvedLever[] = []): TwinResu
       if (ESSENTIAL_CATEGORIES.has(l.category)) essentialMonthly += l.amount;
     } else if (l.kind === 'income_change') {
       monthlyIncome += l.percent !== 0 ? (memberMonthlyIncome(data, l.from) * l.percent) / 100 : l.amount;
+    } else if (l.kind === 'extra_payment' || l.kind === 'transfer') {
+      monthlyObl -= interestPerDay(data, l) * 30.4375; // interest no longer owed
     } else if (l.kind === 'pause_obligation') {
       const o = data.obligations.find(x => x.token === l.from);
       if (o) {

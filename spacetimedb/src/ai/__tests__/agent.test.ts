@@ -305,3 +305,23 @@ describe('live-run fixes, round 5', () => {
     expect(out.steps.some(s => s.step === 'candidates')).toBe(true);
   });
 });
+
+describe('pre-demo fixes', () => {
+  it('rejects a goal shift described in the wrong direction', () => {
+    const http = fakeHttp([
+      () => ({ body: toolCall('simulate_scenario', { title: 'Laptop', levers: [{ kind: 'one_time', amount: 1500, date: '2026-11-14', label: 'Laptop' }] }) }),
+      () => ({ body: final({ title: 'Laptop', answer: 'The Japan trip arrives 18 days sooner.', decision_sim: 'sim_1', chain: [{ step: 'Cash drops.', area: 'cash' }, { step: 'Trip moves.', area: 'goal' }] }) }),
+      () => ({ body: final({ title: 'Laptop', answer: 'The Japan trip arrives 18 days later.', decision_sim: 'sim_1', chain: [{ step: 'Cash drops.', area: 'cash' }, { step: 'The trip is delayed by 18 days.', area: 'goal' }] }) }),
+    ]);
+    const out = runAgent(state('ripple', 'laptop'), { http, primary: cfg, secondary: null });
+    expect(out.steps.some(s => s.step === 'verify' && /"18 days sooner" but the engine shows 18 days later/.test(s.detail))).toBe(true);
+    expect(out.status).toBe('done');
+  });
+
+  it('a card paydown now saves interest in the forecast', () => {
+    const s = state('health', 'x');
+    const card = s.snap.twin.accounts.find(a => a.kind === 'credit_card')!.token;
+    const out = executeTool(s, 'simulate_scenario', { title: 'Pay card', levers: [{ kind: 'extra_payment', loan: card, amount: 1200, date: '2026-11-20' }] }) as any;
+    expect(out.monthly_surplus_after).toBeGreaterThan(out.monthly_surplus_before); // ~$23/month of 22.99% interest
+  });
+});

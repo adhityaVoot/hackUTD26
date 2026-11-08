@@ -113,6 +113,8 @@ class Checker {
     if (/\b(pause|skip|stop paying|suspend)\b[^.]{0,40}\b(visa|card|mortgage|loan|insurance|autopay|car payment)\b/i.test(raw)) {
       this.errors.push(`${field} suggests pausing a debt or insurance payment; those can only be moved (e.g. after payday), never paused`);
     }
+    const flipped = wrongDirection(filled.text, this.state);
+    if (flipped) this.errors.push(`${field} says ${flipped}; check shift_days: positive means later, negative means sooner`);
     // Internal field names ("household_cash_now") mean the model pasted a key instead of a value.
     const fieldName = filled.text.replace(/\{[^}]*\}/g, '').match(/\b(?!(?:acct|obl|goal|sim|mem|opp)_)[a-z]+_[a-z_0-9]+\b/);
     if (fieldName) this.errors.push(`${field} contains the field name "${fieldName[0]}"; write plain English or use a {slot}`);
@@ -637,6 +639,26 @@ export function healthCandidates(state: AgentState): Sim[] {
     if (s) out.push(s);
   }
   return out;
+}
+
+/**
+ * Catches "18 days sooner" when the engine says the goal moved 18 days later (or the reverse).
+ * Only judges numbers that match a simulated goal shift exactly.
+ */
+export function wrongDirection(text: string, state: AgentState): string {
+  const shifts = [...state.sims.values()].flatMap(s => s.diff.goals.map(g => g.shiftDays)).filter(x => x !== 0);
+  if (!shifts.length) return '';
+  const claims: [number, 'later' | 'sooner'][] = [];
+  for (const m of text.matchAll(/(\d+)[\s\u2011-]*days?\s+(sooner|earlier|ahead|later|behind)/gi)) {
+    claims.push([Number(m[1]), /sooner|earlier|ahead/i.test(m[2]) ? 'sooner' : 'later']);
+  }
+  for (const m of text.matchAll(/\b(delay|slip|push)\w*[^.]{0,40}?\bby (\d+) days/gi)) claims.push([Number(m[2]), 'later']);
+  for (const m of text.matchAll(/\b(speed|pull|bring)\w*[^.]{0,40}?\bby (\d+) days/gi)) claims.push([Number(m[2]), 'sooner']);
+  for (const [n, dir] of claims) {
+    const matching = shifts.filter(x => Math.abs(x) === n);
+    if (matching.length && matching.every(x => (x > 0 ? 'later' : 'sooner') !== dir)) return `"${n} days ${dir}" but the engine shows ${n} days ${dir === 'later' ? 'sooner' : 'later'}`;
+  }
+  return '';
 }
 
 /** Tries free fixes and keeps the one that lowers peak overdraft risk most. */
