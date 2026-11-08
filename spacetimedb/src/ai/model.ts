@@ -8,7 +8,7 @@
 // The client is synchronous because SpacetimeDB procedures are: ctx.http.fetch blocks.
 
 export const DEFAULT_BASE_URL = 'https://integrate.api.nvidia.com/v1';
-export const DEFAULT_MODEL = 'nvidia/llama-3.3-nemotron-super-49b-v1.5';
+export const DEFAULT_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b';
 
 export interface HttpResponseLike {
   status: number;
@@ -25,8 +25,9 @@ export interface ModelConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
-  /** Prepends "/no_think" to the system prompt. Nemotron Super 1.5 reasons by default; the
-   *  agent loop is faster and still accurate without visible reasoning for tool calls. */
+  /** Turns Nemotron's reasoning off. Nemotron 3.x uses chat_template_kwargs.enable_thinking;
+   *  the older Llama-based Nemotrons use a "/no_think" system-prompt prefix. The agent loop is
+   *  faster without reasoning, and verification catches mistakes either way. */
   noThink: boolean;
 }
 
@@ -113,7 +114,8 @@ export function extractJson(text: string): unknown {
 
 export function chat(http: HttpLike, cfg: ModelConfig, messages: ChatMessage[], opts: ChatOptions = {}): ChatResult {
   const msgs = messages.map(m => ({ ...m }));
-  if (cfg.noThink && msgs[0]?.role === 'system' && !String(msgs[0].content).startsWith('/no_think')) {
+  const llamaFamily = /llama/i.test(cfg.model);
+  if (llamaFamily && cfg.noThink && msgs[0]?.role === 'system' && !String(msgs[0].content).startsWith('/no_think')) {
     msgs[0].content = `/no_think\n${msgs[0].content}`;
   }
   const body: Record<string, unknown> = {
@@ -121,9 +123,14 @@ export function chat(http: HttpLike, cfg: ModelConfig, messages: ChatMessage[], 
     messages: msgs,
     temperature: opts.temperature ?? 0.2,
     top_p: 0.9,
-    max_tokens: opts.maxTokens ?? 1200,
+    // Reasoning tokens count against max_tokens, so leave room when thinking is on.
+    max_tokens: cfg.noThink ? opts.maxTokens ?? 1200 : Math.max(opts.maxTokens ?? 1200, 8192),
     stream: false,
   };
+  if (!llamaFamily) {
+    body.chat_template_kwargs = { enable_thinking: !cfg.noThink };
+    if (!cfg.noThink) body.reasoning_budget = 4096;
+  }
   if (opts.tools?.length) {
     body.tools = opts.tools;
     body.tool_choice = 'auto';

@@ -143,3 +143,20 @@ describe('tools and opportunities', () => {
     expect(MAYA).toBe(3n);
   });
 });
+
+describe('thinking control', () => {
+  it('uses chat_template_kwargs for Nemotron 3.x and /no_think for Llama-based Nemotron', async () => {
+    const { chat } = await import('../model');
+    const sent: any[] = [];
+    const http = { fetch: (_u: string, i: any) => (sent.push(JSON.parse(i.body)), { status: 200, text: () => '{"choices":[{"message":{"content":"ok"}}]}' }) };
+    const msgs = [{ role: 'system' as const, content: 'sys' }];
+    chat(http, { baseUrl: 'x', apiKey: 'k', model: 'nvidia/nemotron-3.5-lightning-30b-a3b', noThink: true }, msgs);
+    chat(http, { baseUrl: 'x', apiKey: 'k', model: 'nvidia/nemotron-3.5-lightning-30b-a3b', noThink: false }, msgs);
+    chat(http, { baseUrl: 'x', apiKey: 'k', model: 'nvidia/llama-3.3-nemotron-super-49b-v1.5', noThink: true }, msgs);
+    expect(sent[0].chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect(sent[0].messages[0].content).toBe('sys');
+    expect(sent[1]).toMatchObject({ chat_template_kwargs: { enable_thinking: true }, reasoning_budget: 4096, max_tokens: 8192 });
+    expect(sent[2].chat_template_kwargs).toBeUndefined();
+    expect(sent[2].messages[0].content).toBe('/no_think\nsys');
+  });
+});

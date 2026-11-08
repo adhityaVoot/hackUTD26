@@ -56,8 +56,8 @@ Module env (set like the existing `AI_*` keys):
 |---|---|
 | `AI_API_KEY` | none: features run on the rule-based fallback |
 | `AI_BASE_URL` | `https://integrate.api.nvidia.com/v1` (or a NIM container URL inside the bank's network) |
-| `AI_MODEL` | `nvidia/llama-3.3-nemotron-super-49b-v1.5` |
-| `AI_NO_THINK` | `true` (sends `/no_think`; set `false` to let Nemotron reason) |
+| `AI_MODEL` | `nvidia/nemotron-3.5-lightning-30b-a3b` |
+| `AI_NO_THINK` | `true` (reasoning off; set `false` to let Nemotron reason) |
 | `AI_FALLBACK_API_KEY` / `_BASE_URL` / `_MODEL` | optional second provider |
 
 Get a key at build.nvidia.com. Use a spend-capped key and revoke it after the event.
