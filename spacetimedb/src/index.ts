@@ -4,6 +4,7 @@ import {ageProfile,accountPrivacy,isMinor,setBirthDate,setOwnerAccess} from './a
 import {simDayToIso} from './engine/calendar';
 import { moneyRequest, createMoneyRequest as createMoneyRequestRow, respondMoneyRequest as respondMoneyRequestRow } from './moneyRequests';
 import { registerNessie } from './nessie/module';
+import { registerPlaid } from './plaid/module';
 import { SenderError, schema, t, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
 import {
   PIN_FAIL_WINDOW_MICROS,
@@ -91,6 +92,7 @@ import {
   nessieStatus,
   obligation,
   person,
+  plaidItem,
   presence,
   scenario,
   scenarioChange,
@@ -135,6 +137,7 @@ const spacetimedb = schema(
     nessieMap,
     nessieJob,
     nessieStatus,
+    plaidItem,
     presence,
     clockTick,
     dailyMaintenance,
@@ -159,6 +162,9 @@ const spacetimedb = schema(
       NESSIE_DEMO_CUSTOMERS: t.string().optional(),
       NESSIE_API_KEY: t.string().optional(),
       NESSIE_BASE_URL: t.string().optional(),
+      PLAID_CLIENT_ID: t.string().optional(),
+      PLAID_SANDBOX_SECRET: t.string().optional(),
+      PLAID_SECRET: t.string().optional(),
       AUTH_CLIENT_ID:t.string().optional(),
       RESEND_API_KEY:t.string().optional(),
       INVITE_FROM_EMAIL:t.string().optional(),
@@ -719,6 +725,14 @@ export const {
 
 /** Imports only the caller’s server-mapped synthetic bank customer. */
 export const syncNessieDemo = registerNessie(spacetimedb);
+
+/** PATELS loads First Platypus Bank. Every other household uses production Plaid Link. */
+export const {
+  bankConnectionMode,
+  importSandboxBank,
+  createPlaidLinkToken,
+  connectPlaidBank,
+} = registerPlaid(spacetimedb);
 
 export const createMoneyRequest = spacetimedb.reducer(
   { recipientPersonId: t.u64(), amountCents: t.i64(), reason: t.string() },

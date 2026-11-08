@@ -321,3 +321,14 @@ export const backtestResult = table({ name: 'backtest_result' }, {        // P1
   baselineNaiveRecall: t.f64(),
   createdAt: t.timestamp(),
 });
+
+// Access tokens stay in this private table. No view exposes them.
+export const plaidItem = table({ name: 'plaid_item' }, {
+  id: t.u64().primaryKey().autoInc(),
+  householdId: t.u64().index('btree'),
+  ownerPersonId: t.u64().index('btree'),
+  itemId: t.string().unique(),
+  accessToken: t.string(),
+  environment: t.string(),
+  institutionName: t.string(),
+});
