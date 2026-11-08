@@ -89,6 +89,8 @@ import {
   txn,
   vital,
 } from './tables';
+import { registerNemotron } from './ai/module';
+import { aiInsight, decisionMemory, negotiation, negotiationPosition, nemotronWatch, nemotronWatchState } from './ai/tables';
 
 const spacetimedb = schema(
   {
@@ -122,12 +124,22 @@ const spacetimedb = schema(
     clockTick,
     dailyMaintenance,
     backtestResult,
+    aiInsight,
+    decisionMemory,
+    negotiation,
+    negotiationPosition,
+    nemotronWatch,
+    nemotronWatchState,
   },
   {
     env: {
       AI_API_KEY: t.string().optional(),
       AI_BASE_URL: t.string().optional(),
       AI_MODEL: t.string().optional(),
+      AI_NO_THINK: t.string().optional(),
+      AI_FALLBACK_API_KEY: t.string().optional(),
+      AI_FALLBACK_BASE_URL: t.string().optional(),
+      AI_FALLBACK_MODEL: t.string().optional(),
       NESSIE_API_KEY: t.string().optional(),
       NESSIE_BASE_URL: t.string().optional(),
       ADMIN_CODE: t.string().optional(),
@@ -636,3 +648,34 @@ export const renewGrant = spacetimedb.reducer(
   (ctx, { grantId, durationSeconds }) => renewGrantRow(ctx, grantId, durationSeconds),
 );
 
+
+// Nemotron features: Coach (routes to the rest), Digital Twin, Ripple Effect, Negotiation Room,
+// Stress Test, Life Event Simulator, Financial Memory, Opportunity Radar, Health Check, and the
+// Sentinel briefing that runs on its own schedule. See src/ai/module.ts.
+export const {
+  askCoach,
+  requestHealthCheck,
+  requestBriefing,
+  startNemotronWatch,
+  stopNemotronWatch,
+  nemotronWatchTick,
+  askTwin,
+  simulateRipple,
+  stressTest,
+  simulateLifeEvent,
+  askMemory,
+  scanOpportunities,
+  openNegotiation,
+  submitPosition,
+  requestMediation,
+  closeNegotiation,
+  recordDecision,
+  shareInsight,
+  seedNemotronDemo,
+  runAiJob,
+  myAiInsights,
+  myAgentLog,
+  myDecisions,
+  myNegotiations,
+  myNegotiationPositions,
+} = registerNemotron(spacetimedb);
