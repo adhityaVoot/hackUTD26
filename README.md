@@ -1,4 +1,4 @@
-# Kitchen Table
+# Tandem
 
 React frontend prototype on the `frontend` branch.
 
