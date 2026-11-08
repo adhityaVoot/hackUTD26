@@ -1,0 +1,138 @@
+{
+  "operations": {
+    "add_account": [
+      "kind",
+      "nickname",
+      "isJoint",
+      "ownerPersonId",
+      "balanceCents",
+      "limitCents",
+      "aprBps",
+      "bufferCents",
+      "maturityDay"
+    ],
+    "add_change": [
+      "scenarioId",
+      "kind",
+      "paramsJson",
+      "label"
+    ],
+    "add_goal": [
+      "name",
+      "targetCents",
+      "targetDate",
+      "accountId",
+      "shared"
+    ],
+    "add_obligation": [
+      "accountId",
+      "kind",
+      "label",
+      "amountCents",
+      "cadence",
+      "anchorDate",
+      "flexible"
+    ],
+    "add_person": [
+      "displayName",
+      "role"
+    ],
+    "add_transaction": [
+      "accountId",
+      "dateISO",
+      "amountCents",
+      "category",
+      "description"
+    ],
+    "admin_seed_demo": [
+      "adminCode",
+      "inviteCode"
+    ],
+    "create_grant": [
+      "accountId",
+      "granteePersonId",
+      "level",
+      "durationSeconds",
+      "historyWindowDays"
+    ],
+    "create_household": [
+      "name",
+      "myDisplayName"
+    ],
+    "fork": [
+      "parentId",
+      "title"
+    ],
+    "join_household": [
+      "inviteCode",
+      "name"
+    ],
+    "propose": [
+      "scenarioId"
+    ],
+    "remove_account": [
+      "accountId"
+    ],
+    "remove_change": [
+      "changeId"
+    ],
+    "remove_goal": [
+      "goalId"
+    ],
+    "remove_obligation": [
+      "obligationId"
+    ],
+    "renew_grant": [
+      "grantId",
+      "durationSeconds"
+    ],
+    "revoke_grant": [
+      "grantId"
+    ],
+    "set_ai_enabled": [
+      "enabled"
+    ],
+    "set_monthly_spending": [
+      "accountId",
+      "category",
+      "monthlyCents"
+    ],
+    "set_pin": [
+      "pin"
+    ],
+    "update_account": [
+      "accountId",
+      "nickname",
+      "balanceCents",
+      "limitCents",
+      "aprBps",
+      "bufferCents"
+    ],
+    "vote": [
+      "scenarioId",
+      "decision"
+    ],
+    "verify_pin": [
+      "pin"
+    ]
+  },
+  "views": [
+    "householdApprovals",
+    "householdCommitments",
+    "householdConsentLog",
+    "householdPeople",
+    "householdPresence",
+    "householdScenarios",
+    "myAccounts",
+    "myAlerts",
+    "myForecast",
+    "myGrants",
+    "myHousehold",
+    "myInviteCode",
+    "myMember",
+    "myObligations",
+    "myTxns",
+    "myVitals",
+    "scenarioChanges"
+  ]
+}
