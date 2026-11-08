@@ -269,3 +269,39 @@ describe('live-run fixes, round 4', () => {
     expect(v.vitals.find((x: any) => x.vital === 'utilization').bands).toContain('30%');
   });
 });
+
+describe('live-run fixes, round 5', () => {
+  it('sentinel: the engine picks the best simulated fix when the model forgets to name one', () => {
+    const input = patelInput(0n);
+    input.accounts = input.accounts.map(a => (a.id === 10n ? { ...a, balanceCents: 90_000n } : a.id === 11n ? { ...a, balanceCents: 20_000n } : a.id === 13n ? { ...a, balanceCents: 10_000n } : a));
+    const s = newState('briefing', buildSnapshot(input), 'risk', [], { mode: 'sentinel' });
+    const http = fakeHttp([
+      () => ({ body: toolCall('simulate_scenario', { title: 'Trim dining', levers: [{ kind: 'recurring_change', category: 'dining', monthly_delta: -300, start_date: '2026-11-08', end_date: '2026-12-08', label: 'Trim dining' }] }) }),
+      () => ({ body: final({ title: 'Crunch ahead', answer: 'Risk is high early this month.', upcoming: [], watch_out: [] }) }),
+    ]);
+    const out = runAgent(s, { http, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(out.result.scenarios[0].title).toBe('Trim dining');
+  });
+
+  it('gives tools back when verification asks for a simulation after a forced final answer', () => {
+    const http = fakeHttp([
+      () => ({ body: { choices: [{ message: { content: 'Yes, you can afford it.' } }] } }), // prose -> forced final, tools off
+      () => ({ body: final({ title: 'Trip', verdict: 'yes', answer: 'Yes.', tradeoffs: [], recommended_sim: 'sim_1' }) }),
+      () => ({ body: toolCall('simulate_scenario', { title: 'Trip', levers: [{ kind: 'one_time', amount: 3200, date: '2027-03-01', label: 'Trip' }] }) }),
+      () => ({ body: final({ title: 'Trip', verdict: 'yes', answer: 'Yes.', tradeoffs: [], recommended_sim: 'sim_1' }) }),
+    ]);
+    const out = runAgent(state('twin', 'Can we afford a $3,200 trip?'), { http, primary: cfg, secondary: null, maxRetries: 3 });
+    expect(out.steps.some(s => s.step === 'plan' && /tools re-enabled/.test(s.detail))).toBe(true);
+    expect(http.sent[2].tools).toBeDefined();
+    expect(out.status).toBe('done');
+  });
+
+  it('health: the engine pre-simulates candidate moves for Nemotron to choose from', () => {
+    const http = fakeHttp([() => ({ body: final({ title: 'H', answer: 'Mostly healthy.', indicators: [{ vital: 'runway', meaning: 'a' }, { vital: 'dti', meaning: 'b' }, { vital: 'utilization', meaning: 'c' }], best_move_sim: 'sim_1', best_move_why: 'Cuts interest.' }) })]);
+    const out = runAgent(state('health', 'how are we doing'), { http, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(JSON.parse(http.sent[0].messages[1].content).observations.candidate_moves.length).toBeGreaterThanOrEqual(2);
+    expect(out.steps.some(s => s.step === 'candidates')).toBe(true);
+  });
+});

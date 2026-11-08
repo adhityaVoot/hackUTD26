@@ -288,7 +288,11 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
         meaning: c.text(`indicators[${i}].meaning`, x?.meaning, true, 300),
       }));
       if (indicators.filter((x: any) => x.vital).length < 3) c.errors.push('explain at least three of the six indicators, using their exact names');
-      const best = c.sim('best_move_sim', parsed.best_move_sim);
+      // If Nemotron simulated moves but didn't name one, the engine picks the one that raises the score most.
+      const scoreOf = (s: Sim) => s.result.vitals.find(v => v.key === 'score')!.value;
+      const engineBest = [...state.sims.values()].filter(s => scoreOf(s) > state.baseline.vitals.find(v => v.key === 'score')!.value).sort((a, b) => scoreOf(b) - scoreOf(a))[0];
+      const best = state.sims.has(parsed.best_move_sim) ? c.sim('best_move_sim', parsed.best_move_sim) : engineBest;
+      if (!best) c.errors.push('simulate at least one candidate move with simulate_scenario, then cite it as best_move_sim');
       const why = c.text('best_move_why', parsed.best_move_why, false, 300);
       const vit = state.baseline.vitals;
       r.highlights = vit.map(v => ({ label: VITAL_LABEL[v.key], value: v.display, direction: v.band === 'green' ? 'better' : v.band === 'red' ? 'worse' : 'neutral' }));
@@ -304,7 +308,9 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
       const sentinel = state.context.mode === 'sentinel';
       const upcoming = c.texts('upcoming', parsed.upcoming, 5);
       const watch = c.texts('watch_out', parsed.watch_out, 3);
-      const fix = c.sim('fix_sim', parsed.fix_sim, sentinel);
+      // If Nemotron simulated fixes but didn't name one, the engine picks the one with the lowest risk.
+      const engineFix = [...state.sims.values()].filter(s => s.diff.crunchAfter < s.diff.crunchBefore).sort((a, b) => a.diff.crunchAfter - b.diff.crunchAfter)[0];
+      const fix = state.sims.has(parsed.fix_sim) ? c.sim('fix_sim', parsed.fix_sim) : engineFix ?? c.sim('fix_sim', parsed.fix_sim, sentinel);
       const fixWhy = c.text('fix_why', parsed.fix_why, false, 300);
       if (sentinel && fix && fix.diff.crunchAfter >= fix.diff.crunchBefore) c.errors.push('fix_sim must lower overdraft risk; simulate a different fix');
       if (upcoming.length) r.sections.push({ heading: 'Coming up', items: upcoming });
@@ -602,6 +608,35 @@ function briefingHighlights(state: AgentState): Highlight[] {
     { label: 'Overdraft risk', value: `${Math.round(b.peakCrunchRisk * 100)}%`, direction: b.peakCrunchRisk > 0.25 ? 'worse' : 'neutral' },
     { label: 'Monthly surplus', value: $(b.monthlySurplus), direction: b.monthlySurplus > 0 ? 'better' : 'worse' },
   ];
+}
+
+/**
+ * Health Check: the engine simulates standard improvement moves up front; Nemotron picks and explains.
+ * (Spec: "The engine generates options; the AI picks and explains.")
+ */
+export function healthCandidates(state: AgentState): Sim[] {
+  const t = state.snap.twin;
+  const start = dayToIso(t.today + 1);
+  const out: Sim[] = [];
+  const payoff = getOpportunities(state).find(o => o.type === 'high_apr_payoff' && o.lever);
+  if (payoff) {
+    const s = runSim(state, payoff.title, [payoff.lever!]).sim;
+    if (s) out.push(s);
+  }
+  const trims = t.spending
+    .filter(c => ['dining', 'shopping', 'entertainment'].includes(c.category) && c.dailyMean > 1)
+    .map(c => ({ kind: 'recurring_change' as const, category: c.category, monthly_delta: -Math.round(c.dailyMean * 30.4375 * 0.25), start_date: start, label: `Trim ${c.category} by a quarter` }));
+  if (trims.length) {
+    const s = runSim(state, 'Trim flexible spending by a quarter', trims).sim;
+    if (s) out.push(s);
+  }
+  const sub = getOpportunities(state).find(o => o.type === 'subscription_increase');
+  if (sub) {
+    const amt = Number(sub.evidence.cancelling_entirely_saves_per_month) || 0;
+    const s = amt > 0 ? runSim(state, `Cancel ${sub.title.replace(/ went up$/, '').toLowerCase()}`, [{ kind: 'recurring_change', category: 'subscriptions', monthly_delta: -amt, start_date: start, label: 'Cancel subscription' }]).sim : undefined;
+    if (s) out.push(s);
+  }
+  return out;
 }
 
 /** Tries free fixes and keeps the one that lowers peak overdraft risk most. */

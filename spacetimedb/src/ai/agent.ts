@@ -8,8 +8,9 @@
 //  4. Propose: the verified result plus its forks. If anything fails, a deterministic fallback
 //     answers from the same engine, so the app never depends on the model being up.
 
-import { fallback, finalize } from './features';
-import { sanitizeUserText, scanOutbound } from './gateway';
+import { diffView } from './tools';
+import { fallback, finalize, healthCandidates } from './features';
+import { collectNumbers, sanitizeUserText, scanOutbound } from './gateway';
 import { chat, extractJson, type ChatMessage, type HttpLike, type ModelConfig, type ToolSpec } from './model';
 import { jsonToolProtocol, ROUTER_PROMPT, systemPrompt } from './prompts';
 import { classifyMessage } from './intent';
@@ -85,6 +86,13 @@ export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
   }
 
   const names = state.snap.map.nameToToken;
+  if (state.feature === 'health') {
+    const cands = healthCandidates(state);
+    preload.candidate_moves = cands.map(s => diffView(s));
+    collectNumbers(preload.candidate_moves, state.allowedNumbers);
+    log(state, 'candidates', `engine pre-simulated ${cands.length} candidate move(s): ${cands.map(s => s.title).join('; ')}`);
+  }
+
   const question = sanitizeUserText(state.question, names);
   const scrub = (v: unknown): unknown =>
     typeof v === 'string' ? sanitizeUserText(v, names) : Array.isArray(v) ? v.map(scrub) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, scrub(x)])) : v;
@@ -205,6 +213,11 @@ export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
     log(state, 'verify', `failed: ${fin.errors.join('; ')}`, true);
     if (retries >= maxRetries) return fallBack('model answer failed verification twice', 'fallback', firstUser);
     retries++;
+    // If the fix needs a simulation, give the tools back (when steps remain) instead of demanding JSON only.
+    if (forcedFinal && step < maxSteps - 2 && fin.errors.some(e => /simulate_scenario/.test(e))) {
+      forcedFinal = false;
+      log(state, 'plan', 'tools re-enabled so the model can run the simulation it needs');
+    }
     messages.push({ role: 'assistant', content: msg.content ?? '' });
     messages.push({
       role: 'user',

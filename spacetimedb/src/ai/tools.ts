@@ -319,7 +319,7 @@ export function runSim(state: AgentState, title: string, levers: Lever[]): { sim
   const at = (pts: TwinResult['points']) => pts.find(p => p.day === firstDay)?.p50 ?? null;
   const sim: Sim = {
     simId,
-    title: title.replace(/[^A-Za-z0-9 $,.'&()/-]/g, '').slice(0, 60) || simId,
+    title: title.replace(/[^A-Za-z0-9 $%,.'&()/-]/g, '').slice(0, 60) || simId,
     levers: resolved,
     result,
     diff: diff(state.baseline, result),

@@ -98,7 +98,7 @@ function amount(v: unknown, name: string, allowNegative = false): number {
 export function cleanLabel(raw: unknown, fallback: string): string {
   const s = typeof raw === 'string' ? raw : '';
   const cleaned = s
-    .replace(/[^A-Za-z0-9 .,'&()/-]/g, '')
+    .replace(/[^A-Za-z0-9 .,'&()/%$-]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 60);
