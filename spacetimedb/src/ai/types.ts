@@ -84,6 +84,12 @@ export interface TwinGoal {
   shared: boolean;
 }
 
+export interface AccountSpending {
+  token: string;
+  dailyMean: number;
+  dailyVar: number;
+}
+
 export interface TwinData {
   today: number;
   members: TwinMember[];
@@ -91,6 +97,8 @@ export interface TwinData {
   obligations: TwinObligation[];
   spending: TwinSpending[];
   goals: TwinGoal[];
+  /** Per-account split of `spending`; when absent, spending is shared evenly across checking accounts. */
+  accountSpending?: AccountSpending[];
 }
 
 // ---------- Levers (what the model may ask the engine to simulate) ----------
@@ -174,6 +182,8 @@ export interface TwinResult {
   firstCrunchDay: number; // first day pBelowBuffer > 0.25, -1 if none
   peakCrunchRisk: number; // max pBelowBuffer over the next 30 days
   peakCrunchDay: number;
+  crunchAccount: string; // checking account token driving peakCrunchRisk, '' when it is pooled household cash
+  accountRisk: { token: string; peak: number; day: number; first: number; early: number }[]; // each visible checking account's peak 30-day risk and first day over the 25% crunch line and over 10% (-1 if none)
   monthlyIncome: number;
   monthlyOutflow: number;
   monthlySurplus: number;

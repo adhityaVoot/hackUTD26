@@ -215,6 +215,8 @@ export default function NemotronStudio(){
   // Ask from elsewhere in the app (e.g. "Debate it" under a plan).
   useEffect(()=>{const on=e=>{const {mode:md,text:tx}=e.detail||{};if(!md)return;setMode(md);boxRef.current?.scrollIntoView({behavior:'smooth',block:'start'});send(md,tx)};window.addEventListener('nemotron:ask',on);return()=>window.removeEventListener('nemotron:ask',on)});
   const can=!!s.capabilities?.[m.op];
+  // A question handed over from another screen (e.g. Overview's "Fix the crunch").
+  useEffect(()=>{if(!s.capabilities?.ask_coach)return;let q='';try{q=sessionStorage.getItem('tandem/pending-ask')||'';sessionStorage.removeItem('tandem/pending-ask')}catch{}if(!q)return;setMode('ask');setTimeout(()=>boxRef.current?.scrollIntoView({behavior:'smooth',block:'start'}),300);send('ask',q)},[s.capabilities]);
   return <div className="nemotron-studio" ref={boxRef}>
     <div className="studio-modes" role="tablist">{MODES.map(x=><button key={x.key} role="tab" aria-selected={mode===x.key} className={mode===x.key?'active':''} onClick={()=>{setMode(x.key);inputRef.current?.focus()}}><x.Icon size={15}/>{x.label}</button>)}</div>
     <div className="studio-hint-row"><p className="lab-hint">{m.hint}</p><History rows={past}/></div>

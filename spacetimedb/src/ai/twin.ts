@@ -412,6 +412,64 @@ function displayVital(key: VitalKey, v: number): string {
   }
 }
 
+/**
+ * Pooled household cash can look fine while one checking account runs dry (bills drafted from
+ * joint checking while the money sits in joint savings). Project each visible checking account on
+ * its own: its obligations, transfers in and out, and a share of pooled daily spending.
+ */
+function checkingCrunch(data: TwinData, levers: ResolvedLever[]): { token: string; risk: number[] }[] {
+  const checking = data.accounts.filter(a => a.kind === 'checking' && a.visibility !== 'signal');
+  if (!checking.length) return [];
+  const moves = new Map<string, number>();
+  for (const l of levers) if (l.kind === 'move_obligation') moves.set(l.from, l.day);
+  const pauses = levers.filter(l => l.kind === 'pause_obligation');
+  const share = 1 / data.accounts.filter(a => a.kind === 'checking').length;
+  const pooledMean = data.spending.reduce((sum, c) => sum + c.dailyMean, 0) * share;
+  const pooledVar = data.spending.reduce((sum, c) => sum + c.dailyVar, 0) * share;
+  const totalSpend = data.accountSpending?.reduce((sum, row) => sum + row.dailyMean, 0) ?? 0;
+  // One-time items without an account are funded the way proposals fund them: the first shared cash account.
+  const funding =
+    data.accounts.find(a => a.visibility === 'full' && LIQUID_KINDS.has(a.kind) && a.owner === 'joint')?.token ??
+    data.accounts.find(a => a.visibility === 'full' && LIQUID_KINDS.has(a.kind))?.token ?? '';
+  return checking.map(acct => {
+    const own = data.accountSpending?.find(row => row.token === acct.token);
+    const spendMean = data.accountSpending ? own?.dailyMean ?? 0 : pooledMean;
+    const spendVar = data.accountSpending ? own?.dailyVar ?? 0 : pooledVar;
+    // Spending cuts land where the spending happens.
+    const spendShare = data.accountSpending ? (totalSpend > 0 ? (own?.dailyMean ?? 0) / totalSpend : 0) : share;
+    let bal = acct.balance;
+    let variance = 0;
+    const risk: number[] = [];
+    for (let i = 1; i <= FORECAST_DAYS; i++) {
+      const d = data.today + i;
+      bal -= spendMean;
+      variance += spendVar;
+      for (const o of data.obligations) {
+        if (o.accountToken !== acct.token) continue;
+        const moved = moves.get(o.token);
+        const anchor = moved ?? o.anchorDay;
+        if (moved !== undefined && d < moved && occursOn(o.cadence, o.anchorDay, d)) continue;
+        if (!occursOn(o.cadence, anchor, d)) continue;
+        if (pauses.some(p => p.from === o.token && active(p, d))) continue;
+        bal += o.kind === 'income' ? o.amount : -o.amount;
+      }
+      for (const l of levers) {
+        if (l.kind === 'transfer' && d === l.day) {
+          if (l.to === acct.token) bal += l.amount;
+          if (l.from === acct.token) bal -= l.amount;
+        } else if (l.kind === 'one_time' && d === l.day && (l.from || funding) === acct.token) {
+          bal += l.flowIn ? l.amount : -l.amount;
+        } else if (l.kind === 'recurring_change' && active(l, d)) {
+          bal -= (l.amount / 30.4375) * spendShare;
+        }
+      }
+      const sd = Math.sqrt(variance);
+      risk.push(sd > 0 ? normCdf((acct.buffer - bal) / sd) : bal < acct.buffer ? 1 : 0);
+    }
+    return { token: acct.token, risk };
+  });
+}
+
 export function simulate(data: TwinData, levers: ResolvedLever[] = []): TwinResult {
   const liquidAccts = data.accounts.filter(a => LIQUID_KINDS.has(a.kind));
   const startLiquid = liquidAccts.reduce((s, a) => s + a.balance, 0);
@@ -443,6 +501,33 @@ export function simulate(data: TwinData, levers: ResolvedLever[] = []): TwinResu
       peakCrunchRisk = p;
       peakCrunchDay = d;
     }
+  }
+
+  let crunchAccount = '';
+  const accountRisk: { token: string; peak: number; day: number; first: number; early: number }[] = [];
+  for (const { token, risk } of checkingCrunch(data, levers)) {
+    let peak = 0;
+    let peakDay = data.today + 1;
+    let first = -1;
+    let early = -1;
+    risk.slice(0, 30).forEach((p, i) => {
+      if (early === -1 && p > 0.1) early = data.today + i + 1;
+      if (first === -1 && p > CRUNCH_THRESHOLD) first = data.today + i + 1;
+      if (p > peak) {
+        peak = p;
+        peakDay = data.today + i + 1;
+      }
+    });
+    accountRisk.push({ token, peak: round(peak, 3), day: peakDay, first, early });
+    risk.forEach((p, i) => {
+      const d = data.today + i + 1;
+      if (p > CRUNCH_THRESHOLD && (firstCrunchDay === -1 || d < firstCrunchDay)) firstCrunchDay = d;
+      if (i < 30 && p > peakCrunchRisk) {
+        peakCrunchRisk = p;
+        peakCrunchDay = d;
+        crunchAccount = token;
+      }
+    });
   }
 
   // Lowest expected cash over 12 months (stress tests outlast the 60-day window).
@@ -554,6 +639,8 @@ export function simulate(data: TwinData, levers: ResolvedLever[] = []): TwinResu
     firstCrunchDay,
     peakCrunchRisk: round(peakCrunchRisk, 3),
     peakCrunchDay,
+    crunchAccount,
+    accountRisk,
     monthlyIncome: round(monthlyIncome),
     monthlyOutflow: round(monthlyOutflow),
     monthlySurplus: round(monthlySurplus),

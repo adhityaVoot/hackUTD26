@@ -134,6 +134,10 @@
       "decision"
     ],
     "sync_nessie_demo": [],
+    "bank_connection_mode": [],
+    "import_sandbox_bank": [],
+    "create_plaid_link_token": [],
+    "connect_plaid_bank": ["publicToken", "institutionName"],
     "create_money_request": [
       "recipientPersonId",
       "amountCents",

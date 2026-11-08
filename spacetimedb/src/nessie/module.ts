@@ -1,4 +1,4 @@
-import { t } from 'spacetimedb/server';
+import { SenderError, t } from 'spacetimedb/server';
 import { TimeDuration } from 'spacetimedb';
 import { envValue, requireMember } from '../auth';
 import { fitSpendProfiles } from '../engine/fit';
@@ -14,7 +14,7 @@ export function registerNessie(db: typeof database) {
       const key = envValue(tx, 'NESSIE_API_KEY');
       const customers = JSON.parse(envValue(tx, 'NESSIE_DEMO_CUSTOMERS') ?? '{}');
       const customerId = customers[`${me.household.inviteCode}:${me.person.personaKey}`];
-      if (!key || !customerId) throw Error('Demo banking is not configured for your household member. Ask the demo administrator.');
+      if (!key || !customerId) throw new SenderError('Demo banking is not configured for your household member. Ask the demo administrator.');
       return { key, customerId: String(customerId), personId: me.person.id, householdId: me.household.id,
         base: envValue(tx, 'NESSIE_BASE_URL') ?? 'https://api.nessieisreal.com' };
     });

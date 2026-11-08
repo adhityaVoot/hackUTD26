@@ -126,6 +126,34 @@ describe('vitals bands', () => {
     expect(at({ liquidNow: 99 }).find(row => row.key === 'runway')?.band).toBe('red');
     expect(at({ monthlyIncome: 0, trailingIncome: 0 }).find(row => row.key === 'dti')?.why).toMatch(/Needs more data/);
   });
+
+  it('explains each vital with its own inputs and names the at-risk account', () => {
+    const forecast: ForecastResult = {
+      days: [0, 1],
+      byAccount: new Map([[7, { p10: [0, 0], p50: [0, 0], p90: [0, 0], pBelowBuffer: [0, 0.64] }]]),
+      householdLiquid: { p10: [0, 0], p50: [0, 0], p90: [0, 0], pBelowZero: [0, 0] },
+      goalEtaDay: new Map(),
+    };
+    const vitals = computeVitals({
+      forecast,
+      checkingIds: [7],
+      cardBalances: 20_000,
+      cardLimits: 100_000,
+      monthlyDebtPayments: 30_000,
+      monthlyIncome: 100_000,
+      trailingIncome: 100_000,
+      trailingSpending: 80_000,
+      essentialMonthly: 30_000,
+      liquidNow: 90_000,
+      goals: [],
+      accountNames: new Map([[7, 'Joint checking']]),
+    });
+    const why = (key: string) => vitals.find(row => row.key === key)?.why ?? '';
+    expect(why('crunch_risk')).toMatch(/^Joint checking dips below its buffer .* 64% of simulated paths/);
+    expect(why('runway')).toMatch(/3\.0 months/);
+    expect(why('utilization')).toMatch(/20%/);
+    expect(new Set(vitals.map(row => row.why)).size).toBe(vitals.length);
+  });
 });
 
 describe('levers', () => {
