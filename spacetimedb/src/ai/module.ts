@@ -13,6 +13,7 @@ import { SenderError, t } from 'spacetimedb/server';
 import type Spacetimedb from '../index';
 import { envValue, requireAdmin, requireMember, type Ctx } from '../auth';
 import { runAgent } from './agent';
+import { recomputeScenario } from '../recompute';
 import { DEFAULT_BASE_URL, DEFAULT_MODEL, type HttpLike, type ModelConfig } from './model';
 import { buildSnapshot, type SnapshotInput, type Snapshot } from './snapshot';
 import type { MemoryRow } from './memory';
@@ -599,6 +600,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
         for (const l of d.levers) {
           tx.db.scenarioChange.insert({ id: 0n, scenarioId: sc.id, householdId: loaded.householdId, kind: l.kind, paramsJson: leverParams(l, snap), label: String(humanize(l.label)).slice(0, 80) });
         }
+        recomputeScenario(tx, sc.id);
       }
 
       const publicResult = humanize({

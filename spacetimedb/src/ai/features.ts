@@ -3,7 +3,8 @@
 
 import { dayToIso, dayToLabel, nextOccurrence } from './dates';
 import { checkNumbers } from './gateway';
-import { decisionLever, lifeEventAssumptions, parseWhen, shortLabel, stressPlans } from './intent';
+import { decisionLever, lifeEventAssumptions, parseMoney, parseWhen, shortLabel, stressPlans } from './intent';
+import { lookupInformation, priceFromPassages } from './lookup';
 import { DISCLAIMER } from './prompts';
 import { describeLever, diffView, forecastSummary, getOpportunities, runSim, type AgentState, type Sim } from './tools';
 import { searchMemory } from './memory';
@@ -406,7 +407,20 @@ export function fallback(state: AgentState, reason: string): InsightResult {
   switch (state.feature) {
     case 'twin':
     case 'ripple': {
-      const lever = decisionLever(q, t);
+      let lever = decisionLever(q, t);
+      let sourceNote = '';
+      if (parseMoney(q) == null && /\b(buy|afford|purchase|price|cost|worth)\b/i.test(q)) {
+        const found = state.http ? lookupInformation(state.http, q) : { passages: [] as { title: string; url: string; text: string }[] };
+        const price = priceFromPassages(found.passages);
+        if (!price) {
+          const r = base(state, shortLabel(q), 'I looked for a public price and did not find one I can use. What amount should I check against the household?', 'fallback');
+          r.verdict = 'not_yet';
+          r.extra = { reason, sources: found.passages.map(p => p.url) };
+          return r;
+        }
+        if (lever.kind === 'one_time') lever = { ...lever, amount: price };
+        sourceNote = found.passages[0] ? ` Using ${$(price)} from ${found.passages[0].title}.` : '';
+      }
       const { sim } = runSim(state, shortLabel(q), [lever]);
       if (!sim) return base(state, defaultTitle(state.feature), 'I could not turn that into a scenario. Try including an amount and a month.', 'fallback');
       const d = sim.diff;
@@ -419,10 +433,10 @@ export function fallback(state: AgentState, reason: string): InsightResult {
         r.verdict = verdict;
         r.answer =
           verdict === 'yes'
-            ? `Yes. ${sim.title} keeps lowest household cash at ${$(d.minBalanceAfter)} and overdraft risk at ${d.crunchAfter}%.`
+            ? `Yes. ${sim.title} keeps lowest household cash at ${$(d.minBalanceAfter)} and overdraft risk at ${d.crunchAfter}%.${sourceNote}`
             : verdict === 'yes_with_tradeoffs'
-              ? `You can, with trade-offs: ${summaryLine(sim)}.`
-              : `Not yet. Household cash would fall below the buffer on ${d.bufferBreachDay}. ${summaryLine(sim)}.`;
+              ? `You can, with trade-offs: ${summaryLine(sim)}.${sourceNote}`
+              : `Not yet. Household cash would fall below the buffer on ${d.bufferBreachDay}. ${summaryLine(sim)}.${sourceNote}`;
         if (breach && lever.kind === 'one_time') {
           const later = runSim(state, `${sim.title}, saved up first`, [{ ...lever, date: laterDate(state, lever.amount) }]).sim;
           if (later) {

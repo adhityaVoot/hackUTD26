@@ -50,6 +50,7 @@ function toolDocs(tools: ToolSpec[]): string {
 }
 
 export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
+  state.http = deps.http;
   const maxSteps = deps.maxSteps ?? 10;
   const maxRetries = deps.maxRetries ?? 2;
   let promptTokens = 0;

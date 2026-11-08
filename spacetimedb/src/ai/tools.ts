@@ -4,8 +4,9 @@
 
 import { dayToIso, dayToLabel, etaLabel, isoToDay, NO_ETA, nextOccurrence } from './dates';
 import { collectNumbers } from './gateway';
+import { lookupInformation } from './lookup';
 import { searchMemory, type MemoryItem, type MemoryRow } from './memory';
-import type { ToolSpec } from './model';
+import type { HttpLike, ToolSpec } from './model';
 import { findOpportunities, type Opportunity } from './opportunities';
 import { overviewForModel, type Snapshot } from './snapshot';
 import { diff, LeverError, requiredMonthly, resolveLever, simulate, SPEND_CATEGORIES, survivalDays } from './twin';
@@ -43,6 +44,7 @@ export interface AgentState {
   context: Record<string, unknown>; // feature extras (negotiation positions, ...)
   lastSavings: Record<string, unknown> | null; // last required_monthly_savings result, for {savings.*} slots
   bank: BankLookup | null;
+  http: HttpLike | null; // public lookup; household records are never sent through it
 }
 
 export function newState(
@@ -70,6 +72,7 @@ export function newState(
     context,
     lastSavings: null,
     bank: null,
+    http: null,
   };
 }
 
@@ -178,6 +181,15 @@ const ALL_TOOLS: Record<string, ToolSpec> = {
       parameters: { type: 'object', properties: {} },
     },
   },
+  lookup_information: {
+    type: 'function',
+    function: {
+      name: 'lookup_information',
+      description:
+        'Look up a public fact that is not in the household ledger: a product, a price, a definition, or a published rate. Returns short passages with sources. Use a number only when a passage states it. If the passages do not contain the figure, ask the member. Do not send names or account details in the query.',
+      parameters: { type: 'object', properties: { query: { type: 'string', description: 'Short public search, e.g. "Koenigsegg Jesko price"' } }, required: ['query'] },
+    },
+  },
   find_opportunities: {
     type: 'function',
     function: {
@@ -190,15 +202,15 @@ const ALL_TOOLS: Record<string, ToolSpec> = {
 };
 
 const FEATURE_TOOLS: Record<FeatureKind, string[]> = {
-  twin: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'simulate_scenario', 'required_monthly_savings', 'check_bank'],
-  ripple: ['get_household_overview', 'get_forecast_summary', 'simulate_scenario'],
-  negotiation: ['get_household_overview', 'get_vitals', 'simulate_scenario', 'search_memory'],
-  stress: ['get_household_overview', 'get_forecast_summary', 'simulate_scenario'],
-  life_event: ['get_household_overview', 'get_forecast_summary', 'simulate_scenario', 'required_monthly_savings'],
+  twin: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'lookup_information', 'simulate_scenario', 'required_monthly_savings', 'check_bank'],
+  ripple: ['get_household_overview', 'get_forecast_summary', 'lookup_information', 'simulate_scenario'],
+  negotiation: ['get_household_overview', 'get_vitals', 'lookup_information', 'simulate_scenario', 'search_memory'],
+  stress: ['get_household_overview', 'get_forecast_summary', 'lookup_information', 'simulate_scenario'],
+  life_event: ['get_household_overview', 'get_forecast_summary', 'lookup_information', 'simulate_scenario', 'required_monthly_savings'],
   memory: ['search_memory', 'get_vitals'],
-  opportunity: ['find_opportunities', 'get_forecast_summary', 'simulate_scenario'],
-  health: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'simulate_scenario', 'check_bank'],
-  briefing: ['get_household_overview', 'get_forecast_summary', 'get_vitals', 'simulate_scenario', 'find_opportunities', 'check_bank'],
+  opportunity: ['find_opportunities', 'get_forecast_summary', 'lookup_information', 'simulate_scenario'],
+  health: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'lookup_information', 'simulate_scenario', 'check_bank'],
+  briefing: ['get_household_overview', 'get_forecast_summary', 'get_vitals', 'lookup_information', 'simulate_scenario', 'find_opportunities', 'check_bank'],
   coach: [],
 };
 
@@ -437,6 +449,11 @@ export function executeTool(state: AgentState, name: string, rawArgs: string | R
         note: 'saves_per_month values are monthly, recurring savings.',
         opportunities: opps.map(o => ({ opportunity: o.opportunity, type: o.type, scope: o.scope, owner: o.owner, title: o.title, evidence: o.evidence, saves_per_month: o.est_monthly_savings, effort: o.effort, free: o.free, has_fix: !!o.lever })),
       });
+    }
+    case 'lookup_information': {
+      if (!state.http) return { available: false, note: 'Public lookup is not available in this run.' };
+      const query = String(args.query ?? state.question);
+      return remember(state, lookupInformation(state.http, query));
     }
     case 'check_bank':
       return remember(state, checkBank(state));

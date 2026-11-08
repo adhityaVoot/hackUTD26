@@ -5,6 +5,11 @@ import { dayToDate, dayToIso, isoToDay, monthIndexIn } from './dates';
 import type { Lever, TwinData } from './types';
 
 export function parseMoney(text: string): number | null {
+  const million = /\$?\s?(\d+(?:\.\d+)?)\s*million(?:\s+dollars)?\b/i.exec(text);
+  if (million) {
+    const n = Number(million[1]) * 1_000_000;
+    if (Number.isFinite(n) && n > 0) return Math.round(n);
+  }
   const m = /\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k|thousand)?/i.exec(text) ?? /(\d[\d,]*(?:\.\d+)?)\s*(k|thousand|dollars|bucks)\b/i.exec(text);
   if (!m) return null;
   let n = Number(m[1].replace(/,/g, ''));
