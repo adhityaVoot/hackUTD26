@@ -18,7 +18,13 @@ import { newState } from '../tools';
 import type { FeatureKind } from '../types';
 import { patelInput } from './fixture';
 
-const KEY = process.env.NVIDIA_API_KEY;
+// Load spacetimedb/.env if present (Node 20.12+). Values already in the shell win.
+try {
+  process.loadEnvFile(new URL('../../../.env', import.meta.url).pathname);
+} catch {
+  // no .env file: rely on the shell environment
+}
+const KEY = process.env.NVIDIA_API_KEY || undefined;
 
 const curlHttp: HttpLike = {
   fetch(url, init) {
