@@ -607,6 +607,18 @@ export function requiredMonthly(target: number, fromDay: number, byDay: number):
   return round(target / months);
 }
 
+/** Expected household cash every `step` days for the next year, for charts. Starts with today's balance. */
+export function balanceSeries(data: TwinData, levers: ResolvedLever[] = [], days = 364, step = 7): { day: number; balance: number }[] {
+  let bal = data.accounts.filter(a => LIQUID_KINDS.has(a.kind)).reduce((s, a) => s + a.balance, 0);
+  const flows = dailyFlows(data, levers, days);
+  const out = [{ day: data.today, balance: Math.round(bal) }];
+  for (let i = 0; i < flows.length; i++) {
+    bal += flows[i].mean;
+    if ((i + 1) % step === 0) out.push({ day: data.today + i + 1, balance: Math.round(bal) });
+  }
+  return out;
+}
+
 /** Days until the expected household liquid balance first drops below zero, or -1. */
 export function survivalDays(data: TwinData, levers: ResolvedLever[]): number {
   const start = data.accounts.filter(a => LIQUID_KINDS.has(a.kind)).reduce((s, a) => s + a.balance, 0);

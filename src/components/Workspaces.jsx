@@ -7,6 +7,7 @@ import {useIdentityAuth} from '../IdentityAuth';
 import {ImpactDiff,SavedGoals,OpsAudit,OneTimeAppShare} from './Enhancements';
 import {namedEditors,centsFromInput} from '../plannerData';
 import {serializeArguments} from '../liveActions';
+import {ScenarioChart,AgentTrace,ReviewBadge} from './NemotronLab';
 import {Activity,GitBranch,ShieldCheck,Users,Plus,X,Lock,Mail,Settings,MessageCircle,Clock,Copy,ArrowRight,Check} from 'lucide-react';
 
 const dollars=c=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(Number(c)/100);
@@ -65,12 +66,15 @@ function CoachChat({s,agentForks}){
       {turns.map(row=>{const r=coachResult(row);return <React.Fragment key={String(row.id)}>
         <div className="coach-bubble coach-user">{row.question}</div>
         <div className="coach-bubble coach-reply">
-          {row.status==='thinking'?<p className="coach-thinking">Checking prices and running the numbers…</p>:<>
+          {row.status==='thinking'?<><p className="coach-thinking">Checking prices and running the numbers…</p><AgentTrace runId={row.runId} live/></>:<>
             <p>{r.answer||'No answer came back.'}</p>
+            <ReviewBadge review={r.review}/>
             {Array.isArray(r.extra?.questions)&&r.extra.questions.length>1&&<ul className="coach-questions">{r.extra.questions.map((q,i)=><li key={i}>{q}</li>)}</ul>}
             {r.followUp&&<p className="coach-follow">{r.followUp}</p>}
             {Array.isArray(r.sources)&&r.sources.length>0&&<p className="coach-sources">Sources: {r.sources.map((x,i)=><React.Fragment key={x.url}>{i>0&&' · '}<a href={x.url} target="_blank" rel="noreferrer noopener">{x.title}</a></React.Fragment>)}</p>}
+            <ScenarioChart result={r} height={170} max={3}/>
             {r.source==='fallback'&&<small className="coach-meta">Rule-based answer (Nemotron was unavailable)</small>}
+            <AgentTrace runId={row.runId}/>
           </>}
         </div>
       </React.Fragment>})}

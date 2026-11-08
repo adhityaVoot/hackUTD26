@@ -22,7 +22,7 @@ import { buildSnapshot, type SnapshotInput, type Snapshot } from './snapshot';
 import type { MemoryRow } from './memory';
 import { aiInsight, decisionMemory, negotiation, negotiationPosition, nemotronJob, nemotronWatch } from './tables';
 import { describeLever, newState, type BankLookup } from './tools';
-import { routeCoach, type CoachTurn } from './agent';
+import { routeCoach, runDebate, type CoachTurn } from './agent';
 import { simulate } from './twin';
 import type { FeatureKind, InsightResult, ResolvedLever } from './types';
 
@@ -490,6 +490,12 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
     if (!threadId) ctx.db.aiInsight.id.update({ ...ins, contextJson: JSON.stringify({ threadId: String(ins.id) }) });
   });
 
+  /** Debate it: Advocate vs Skeptic on a decision, then a Judge's verdict. */
+  const debateDecision = spacetimedb.reducer({ decision: t.string() }, (ctx, { decision }) => {
+    const me = requireMember(ctx);
+    enqueue(ctx, me, 'debate', cleanText(decision, 'decision'), me.person.id);
+  });
+
   const requestHealthCheck = spacetimedb.reducer(ctx => {
     const me = requireMember(ctx);
     enqueue(ctx, me, 'health', 'How is our financial health?', me.person.id);
@@ -592,6 +598,18 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
         };
         status = 'done';
         steps = routeSteps;
+      } else if (feature === 'debate') {
+        // Analyst first (the Digital Twin simulates the decision), then the debate on its facts.
+        const state = newState('twin', snap, request, loaded.memoryRows, runContext);
+        state.steps.push(...routeSteps);
+        const outcome = runAgent(state, { ...deps, skipReview: true });
+        result = outcome.result;
+        status = outcome.status;
+        audit = outcome.auditPayload;
+        const debated = outcome.status === 'done' ? runDebate(state, result, deps) : { ok: false, calls: 0, promptTokens: 0, completionTokens: 0 };
+        steps = state.steps;
+        if (!debated.ok) steps.push({ step: 'debate', detail: 'The debate could not finish; showing the analysis instead', flagged: true });
+        steps.push({ step: 'usage', detail: `${outcome.modelCalls + debated.calls} model call(s)`, flagged: false });
       } else {
         const state = newState(feature, snap, request, loaded.memoryRows, runContext);
         if (loaded.bank) state.bank = nessieBank(http, loaded.bank, snap, loaded.snapInput.accounts);
@@ -649,7 +667,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
 
       const publicResult = humanize({
         ...result,
-        scenarios: result.scenarios.map(d => ({ simId: d.simId, scenarioId: scenarioIds[d.simId] ?? '', title: d.title, changes: d.levers.map(describeLever), diff: d.diff })),
+        scenarios: result.scenarios.map(d => ({ simId: d.simId, scenarioId: scenarioIds[d.simId] ?? '', title: d.title, changes: d.levers.map(describeLever), diff: d.diff, series: d.series })),
       });
       const firstScenario = result.scenarios[0] ? BigInt(scenarioIds[result.scenarios[0].simId] ?? '0') : 0n;
 
@@ -730,6 +748,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
 
   return {
     askCoach,
+    debateDecision,
     requestHealthCheck,
     requestBriefing,
     startNemotronWatch,

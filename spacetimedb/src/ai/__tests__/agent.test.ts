@@ -487,3 +487,71 @@ describe('asks at most once', () => {
     expect(rules.clarify).toBeUndefined();
   });
 });
+
+describe('Reviewer agent', () => {
+  const draftThen = (reviewer: unknown) => fakeHttp([
+    () => ({ body: toolCall('simulate_scenario', { title: 'Trip in July', levers: [{ kind: 'one_time', amount: 3200, date: '2027-07-01', label: 'Japan trip' }] }) }),
+    () => ({ body: final({ title: 'Trip', verdict: 'yes', answer: 'Moving the trip to July delays the house goal by {sim_1.goal_1.shift_days} days.', tradeoffs: [], recommended_sim: 'sim_1' }) }),
+    () => ({ body: final(reviewer) }),
+  ]);
+
+  it('fixes framing errors the number check cannot see', () => {
+    const http = draftThen({ verdict: 'revise', issues: ['compares July against having no trip, not against March'], answer: 'A July trip costs the same as a March one; either way the house goal moves {sim_1.goal_1.shift_days} days later than with no trip.' });
+    const out = runAgent(state('twin', 'What if we did the Japan trip in July instead of March?'), { http, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(out.result.review?.verdict).toBe('revised');
+    expect(out.result.answer).toMatch(/^A July trip costs the same as a March one; either way the house goal moves \d+ days later than with no trip\.$/);
+    expect(http.sent[2].messages[0].content).toContain('You are the Reviewer');
+    expect(out.steps.some(s => s.step === 'review' && /revised/.test(s.detail))).toBe(true);
+  });
+
+  it("keeps the verified draft when the Reviewer's rewrite invents a number", () => {
+    const http = draftThen({ verdict: 'revise', issues: ['x'], answer: 'It will cost you $77,777.' });
+    const out = runAgent(state('twin', 'trip'), { http, primary: cfg, secondary: null });
+    expect(out.result.review?.verdict).toBe('skipped');
+    expect(out.result.answer).toMatch(/^Moving the trip to July delays the house goal by \d+ days\.$/);
+  });
+
+  it('approves sound answers and every result carries a 12-month baseline series for charts', () => {
+    const http = draftThen({ verdict: 'approve', issues: [] });
+    const out = runAgent(state('twin', 'trip'), { http, primary: cfg, secondary: null });
+    expect(out.result.review?.verdict).toBe('approved');
+    expect(out.result.baselineSeries!.length).toBe(53);
+    expect(out.result.scenarios[0].series!.length).toBe(53);
+  });
+});
+
+describe('Debate it (Advocate, Skeptic, Judge)', () => {
+  it('argues both sides from the simulation, drops unsupported points, and returns a verdict', async () => {
+    const { runDebate } = await import('../agent');
+    const http = fakeHttp([
+      () => ({ body: toolCall('simulate_scenario', { title: 'Car in March', levers: [{ kind: 'one_time', amount: 3500, date: '2027-03-01', label: 'Used car' }] }) }),
+      () => ({ body: final({ title: 'Car', verdict: 'yes_with_tradeoffs', answer: 'You can, with trade-offs.', tradeoffs: [], recommended_sim: 'sim_1' }) }),
+      () => ({ body: final({ points: ['Lowest cash stays at {sim_1.lowest_cash_after}, above your buffer.', 'It will make you $9,999,999 richer.'] }) }),
+      () => ({ body: final({ points: ['The house goal moves {sim_1.goal_1.shift_days} days later.'] }) }),
+      () => ({ body: final({ verdict: 'wait', answer: 'Waiting a few months keeps the house goal closer to on time.', follow_up: 'Want me to check a later date?' }) }),
+    ]);
+    const s = state('twin', 'Should we buy a $3,500 used car in March?');
+    const deps = { http, primary: cfg, secondary: null, skipReview: true };
+    const out = runAgent(s, deps);
+    const d = runDebate(s, out.result, deps);
+    expect(d.ok).toBe(true);
+    expect(out.result.kind).toBe('debate');
+    expect(out.result.verdict).toBe('wait');
+    const debate = out.result.extra!.debate as { for: string[]; against: string[] };
+    expect(debate.for).toEqual([expect.stringMatching(/^Lowest cash stays at \$[\d,]+, above your buffer\.$/)]); // invented point dropped
+    expect(debate.against[0]).toMatch(/moves \d+ days later/);
+    expect(s.steps.filter(x => x.step === 'debate').map(x => x.detail.split(':')[0])).toEqual(['Advocate', 'Skeptic', 'Judge']);
+  });
+});
+
+describe('decisions beyond the 60-day window', () => {
+  it('flags them so agents argue from the 12-month figures', () => {
+    const s = state('twin', 'x');
+    const soon = executeTool(s, 'simulate_scenario', { title: 'Laptop', levers: [{ kind: 'one_time', amount: 1500, date: '2026-11-14', label: 'Laptop' }] }) as any;
+    const later = executeTool(s, 'simulate_scenario', { title: 'Car', levers: [{ kind: 'one_time', amount: 35000, date: '2027-03-01', label: 'Car' }] }) as any;
+    expect(soon.decision_beyond_60_days).toBe(false);
+    expect(later.decision_beyond_60_days).toBe(true);
+    expect(later.lowest_cash_12_months_after).toBeLessThan(later.lowest_cash_12_months_before);
+  });
+});

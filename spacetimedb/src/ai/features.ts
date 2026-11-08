@@ -42,7 +42,7 @@ export function highlightsFromDiff(d: TwinDiff, max = 5): Highlight[] {
 }
 
 function draft(s: Sim): ScenarioDraft {
-  return { simId: s.simId, title: s.title, levers: s.levers, diff: s.diff };
+  return { simId: s.simId, title: s.title, levers: s.levers, diff: s.diff, series: s.series };
 }
 
 function base(state: AgentState, title: string, answer: string, source: InsightResult['source']): InsightResult {
@@ -141,6 +141,13 @@ class Checker {
     this.errors.push(`${field} must be one of ${options.join(', ')}`);
     return fallback;
   }
+}
+
+/** Runs the same checks a writer's text gets (numbers, slots, field names, direction, debt pauses). */
+export function verifyText(state: AgentState, text: string, max = 700): { text: string; errors: string[] } {
+  const c = new Checker(state);
+  const out = c.text('reviewed answer', text, true, max);
+  return { text: out, errors: c.errors };
 }
 
 export interface Finalized {
@@ -334,6 +341,7 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
     }
     case 'coach':
     case 'clarify':
+    case 'debate':
       c.errors.push('internal: coach must be routed before running');
       break;
     case 'opportunity': {
@@ -367,7 +375,7 @@ function publicOpp(o: ReturnType<typeof getOpportunities>[number]) {
 }
 
 function defaultTitle(f: FeatureKind): string {
-  return { twin: 'Your question', ripple: 'Ripple effect', negotiation: 'A middle path', stress: 'Stress test', life_event: 'Life event plan', memory: 'From your decision log', opportunity: 'Opportunities', health: 'Your financial health', briefing: 'Household briefing', coach: 'Coach', clarify: 'A few questions first' }[f];
+  return { twin: 'Your question', ripple: 'Ripple effect', negotiation: 'A middle path', stress: 'Stress test', life_event: 'Life event plan', memory: 'From your decision log', opportunity: 'Opportunities', health: 'Your financial health', briefing: 'Household briefing', coach: 'Coach', clarify: 'A few questions first', debate: 'The debate' }[f];
 }
 
 function summaryLine(s: Sim): string {
@@ -575,6 +583,8 @@ export function fallback(state: AgentState, reason: string): InsightResult {
     }
     case 'clarify':
       return base(state, 'A few questions first', 'Tell me a bit more and I can work it out.', 'fallback');
+    case 'debate':
+      return base(state, 'The debate', 'The debate needs Nemotron; try again when the model is available.', 'fallback');
     case 'coach':
       return base(state, 'Coach', 'I could not work out what to look at. Try asking about a purchase, an emergency, or your vitals.', 'fallback');
     case 'opportunity': {

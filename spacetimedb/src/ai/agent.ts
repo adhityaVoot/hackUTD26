@@ -9,10 +9,11 @@
 //     answers from the same engine, so the app never depends on the model being up.
 
 import { diffView } from './tools';
-import { fallback, finalize, healthCandidates } from './features';
+import { fallback, finalize, healthCandidates, verifyText } from './features';
 import { checkNumbers, collectNumbers, redactNames, sanitizeUserText, scanOutbound } from './gateway';
 import { chat, extractJson, type ChatMessage, type HttpLike, type ModelConfig, type ToolSpec } from './model';
-import { jsonToolProtocol, ROUTER_PROMPT, systemPrompt } from './prompts';
+import { ADVOCATE_PROMPT, JUDGE_PROMPT, jsonToolProtocol, REVIEWER_PROMPT, ROUTER_PROMPT, SKEPTIC_PROMPT, systemPrompt } from './prompts';
+import { balanceSeries } from './twin';
 import { clarifyQuestions, classifyMessage, type Clarify } from './intent';
 import { dayToLabel } from './dates';
 import { executeTool, toolsFor, type AgentState } from './tools';
@@ -24,6 +25,7 @@ export interface AgentDeps {
   secondary: ModelConfig | null;
   timeout?: unknown;
   sleep?: (ms: number) => void; // lets the client wait out rate limits
+  skipReview?: boolean; // tests that script exact model replies turn the Reviewer off
   maxSteps?: number;
   maxRetries?: number;
 }
@@ -64,7 +66,7 @@ export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
   }
 
   const done = (result: InsightResult, status: AgentOutcome['status'], audit = ''): AgentOutcome => ({
-    result,
+    result: { ...result, baselineSeries: result.baselineSeries ?? balanceSeries(state.snap.twin) },
     steps: state.steps,
     status,
     promptTokens,
@@ -210,6 +212,10 @@ export function runAgent(state: AgentState, deps: AgentDeps): AgentOutcome {
     const fin = finalize(state, answer, res.model);
     if (fin.result) {
       log(state, 'verify', `passed: ${fin.result.scenarios.length} fork(s) re-checked against the engine; every number in the text traced to engine output`);
+      const usage = review(state, fin.result, cfg, deps);
+      promptTokens += usage.promptTokens;
+      completionTokens += usage.completionTokens;
+      modelCalls += usage.calls;
       if (fin.result.scenarios.length) log(state, 'propose', `draft fork "${fin.result.scenarios[0].title}" ready for the household to review; agents cannot approve`);
       return done(fin.result, 'done', firstUser);
     }
@@ -241,6 +247,116 @@ function safeTitle(args: string): string {
 function summarizeSim(out: any): string {
   if (!out || out.error) return 'error';
   return `${out.sim_id}: lowest cash ${out.lowest_cash_before} -> ${out.lowest_cash_after}, overdraft risk ${out.overdraft_risk_pct_before}% -> ${out.overdraft_risk_pct_after}%`;
+}
+
+/**
+ * The Reviewer agent: a second Nemotron call reads the Writer's draft next to the engine's facts and
+ * either approves it or rewrites it. A rewrite is only used if it passes the same checks as the draft.
+ */
+function review(state: AgentState, result: InsightResult, cfg: ModelConfig, deps: AgentDeps): { promptTokens: number; completionTokens: number; calls: number } {
+  const none = { promptTokens: 0, completionTokens: 0, calls: 0 };
+  if (!result.answer || deps.skipReview) return none;
+  const facts = {
+    simulations: result.scenarios.map(s => state.sims.get(s.simId)).filter(Boolean).map(s => diffView(s!)),
+    spending_budget: state.lastBudget,
+    prices_found_online: state.prices.slice(0, 8),
+    household_now: { cash: state.baseline.startLiquid, buffer: state.baseline.buffer, monthly_surplus: state.baseline.monthlySurplus },
+  };
+  const names = state.snap.map.nameToToken;
+  const payload = redactNames(
+    JSON.stringify({
+      request: sanitizeUserText(state.question, names),
+      conversation: state.context.conversation ?? [],
+      draft: { answer: result.answer, follow_up: result.followUp ?? '', verdict: result.verdict ?? '', details: result.sections.flatMap(s => s.items).slice(0, 8) },
+      facts,
+    }),
+    names,
+    state.snap.map.nicknameWords,
+  );
+  if (!scanOutbound(payload, state.snap.map.names, state.snap.map.nicknameWords).ok) {
+    result.review = { verdict: 'skipped', issues: ['privacy scan'] };
+    return none;
+  }
+  const res = chat(deps.http, cfg, [{ role: 'system', content: REVIEWER_PROMPT }, { role: 'user', content: payload }], { maxTokens: 900, temperature: 0.1, timeout: deps.timeout, sleep: deps.sleep });
+  const usage = { promptTokens: res.promptTokens, completionTokens: res.completionTokens, calls: 1 };
+  const parsed = res.ok ? (extractJson(res.message?.content ?? '') as { verdict?: string; issues?: unknown; answer?: string; follow_up?: string } | null) : null;
+  if (!parsed) {
+    result.review = { verdict: 'skipped', issues: [] };
+    log(state, 'review', 'Reviewer unavailable; the verified draft stands');
+    return usage;
+  }
+  const issues = (Array.isArray(parsed.issues) ? parsed.issues : []).filter((x): x is string => typeof x === 'string').slice(0, 5).map(x => x.slice(0, 200));
+  if (parsed.verdict === 'revise' && typeof parsed.answer === 'string' && parsed.answer.trim()) {
+    const checked = verifyText(state, parsed.answer.trim());
+    if (!checked.errors.length) {
+      result.answer = checked.text;
+      if (typeof parsed.follow_up === 'string' && parsed.follow_up.trim()) {
+        const f = verifyText(state, parsed.follow_up.trim(), 300);
+        if (!f.errors.length) result.followUp = f.text;
+      }
+      result.review = { verdict: 'revised', issues };
+      log(state, 'review', `Reviewer revised the answer: ${issues.join('; ') || 'clarity'}`);
+      return usage;
+    }
+    result.review = { verdict: 'skipped', issues };
+    log(state, 'review', `Reviewer's rewrite failed verification (${checked.errors[0]}); the verified draft stands`, true);
+    return usage;
+  }
+  result.review = { verdict: 'approved', issues };
+  log(state, 'review', 'Reviewer approved the answer');
+  return usage;
+}
+
+/**
+ * Debate it: after the Analyst has simulated the decision, an Advocate and a Skeptic argue from the same
+ * facts and a Judge weighs them. Every point goes through the same checks as any answer; points that fail
+ * are dropped. Returns false (leaving the analysis as the answer) if the debate can't be completed.
+ */
+export function runDebate(state: AgentState, result: InsightResult, deps: AgentDeps): { ok: boolean; promptTokens: number; completionTokens: number; calls: number } {
+  const usage = { ok: false, promptTokens: 0, completionTokens: 0, calls: 0 };
+  const cfg = deps.primary;
+  if (!cfg || !result.scenarios.length) return usage;
+  const names = state.snap.map.nameToToken;
+  const facts = {
+    decision: sanitizeUserText(state.question, names),
+    simulations: result.scenarios.map(s => state.sims.get(s.simId)).filter(Boolean).map(s => diffView(s!)),
+    spending_budget: state.lastBudget,
+    prices_found_online: state.prices.slice(0, 6),
+    household_now: { cash: state.baseline.startLiquid, buffer: state.baseline.buffer, monthly_surplus: state.baseline.monthlySurplus },
+  };
+  const ask = (system: string, payload: unknown, role: string) => {
+    const body = redactNames(JSON.stringify(payload), names, state.snap.map.nicknameWords);
+    if (!scanOutbound(body, state.snap.map.names, state.snap.map.nicknameWords).ok) return null;
+    const res = chat(deps.http, cfg, [{ role: 'system', content: system }, { role: 'user', content: body }], { maxTokens: 700, temperature: 0.3, timeout: deps.timeout, sleep: deps.sleep });
+    usage.calls++;
+    usage.promptTokens += res.promptTokens;
+    usage.completionTokens += res.completionTokens;
+    const parsed = res.ok ? (extractJson(res.message?.content ?? '') as Record<string, unknown> | null) : null;
+    log(state, 'debate', `${role}: ${parsed ? 'made its case' : 'no usable reply'}`, !parsed);
+    return parsed;
+  };
+  const points = (raw: Record<string, unknown> | null) =>
+    (Array.isArray(raw?.points) ? (raw!.points as unknown[]) : [])
+      .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+      .slice(0, 3)
+      .map(x => verifyText(state, x.trim(), 300))
+      .filter(v => !v.errors.length)
+      .map(v => v.text);
+  const pro = points(ask(ADVOCATE_PROMPT, { facts }, 'Advocate'));
+  const con = points(ask(SKEPTIC_PROMPT, { facts }, 'Skeptic'));
+  if (!pro.length || !con.length) return usage;
+  const judged = ask(JUDGE_PROMPT, { facts, advocate: pro, skeptic: con }, 'Judge');
+  const verdict = ['go', 'wait', 'skip'].includes(String(judged?.verdict)) ? String(judged!.verdict) : '';
+  const answer = typeof judged?.answer === 'string' ? verifyText(state, judged.answer.trim()) : null;
+  if (!verdict || !answer || answer.errors.length) return usage;
+  const follow = typeof judged?.follow_up === 'string' ? verifyText(state, judged.follow_up.trim(), 300) : null;
+  result.kind = 'debate';
+  result.verdict = verdict;
+  result.answer = answer.text;
+  result.followUp = follow && !follow.errors.length ? follow.text : result.followUp;
+  result.extra = { ...(result.extra ?? {}), debate: { for: pro, against: con, verdict } };
+  usage.ok = true;
+  return usage;
 }
 
 export interface CoachTurn {

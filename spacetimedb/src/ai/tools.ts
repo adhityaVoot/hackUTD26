@@ -9,7 +9,7 @@ import { searchMemory, type MemoryItem, type MemoryRow } from './memory';
 import type { HttpLike, ToolSpec } from './model';
 import { findOpportunities, type Opportunity } from './opportunities';
 import { overviewForModel, type Snapshot } from './snapshot';
-import { diff, LeverError, requiredMonthly, resolveLever, simulate, SPEND_CATEGORIES, survivalDays } from './twin';
+import { balanceSeries, diff, LeverError, requiredMonthly, resolveLever, simulate, SPEND_CATEGORIES, survivalDays } from './twin';
 import type { AgentStep, FeatureKind, Lever, ResolvedLever, TwinDiff, TwinResult } from './types';
 
 export interface Sim {
@@ -20,6 +20,7 @@ export interface Sim {
   diff: TwinDiff;
   survivalDays: number;
   firstDay: number; // earliest lever day
+  series: { day: number; balance: number }[]; // weekly expected household cash, next 12 months
   cashOnFirstDayBefore: number | null; // expected household cash that day, null if beyond 60 days
   cashOnFirstDayAfter: number | null;
 }
@@ -47,6 +48,7 @@ export interface AgentState {
   http: HttpLike | null; // public lookup; household records are never sent through it
   lastBudget: Record<string, unknown> | null; // last spending_budget result, for {budget.*} slots
   sources: Map<string, string>; // url -> title for every page lookup_information returned
+  prices: { amount: number; context: string; source: string }[]; // price points lookup returned, for the Reviewer
 }
 
 export function newState(
@@ -77,6 +79,7 @@ export function newState(
     http: null,
     lastBudget: null,
     sources: new Map(),
+    prices: [],
   };
 }
 
@@ -226,6 +229,7 @@ const FEATURE_TOOLS: Record<FeatureKind, string[]> = {
   briefing: ['get_household_overview', 'get_forecast_summary', 'get_vitals', 'lookup_information', 'simulate_scenario', 'find_opportunities', 'check_bank'],
   coach: [],
   clarify: [],
+  debate: [],
 };
 
 export function toolsFor(feature: FeatureKind): ToolSpec[] {
@@ -298,6 +302,7 @@ export function diffView(s: Sim) {
     monthly_surplus_after: d.monthlySurplusAfter,
     cash_runs_out_in_days: s.survivalDays < 0 ? 'not within 2 years' : s.survivalDays,
     decision_date: dayToLabel(s.firstDay),
+    decision_beyond_60_days: s.firstDay > (s.series[0]?.day ?? s.firstDay) + 60, // series starts today
     cash_on_decision_date_before: s.cashOnFirstDayBefore ?? 'beyond 60 days',
     cash_on_decision_date_after: s.cashOnFirstDayAfter ?? 'beyond 60 days',
     cushion_above_buffer_before: Math.round(d.minBalanceBefore - s.result.buffer),
@@ -353,6 +358,7 @@ export function runSim(state: AgentState, title: string, levers: Lever[]): { sim
     firstDay,
     cashOnFirstDayBefore: at(state.baseline.points),
     cashOnFirstDayAfter: at(result.points),
+    series: balanceSeries(state.snap.twin, resolved),
   };
   state.sims.set(simId, sim);
   return { sim, errors: [] };
@@ -490,6 +496,7 @@ export function executeTool(state: AgentState, name: string, rawArgs: string | R
       const query = String(args.query ?? state.question);
       const found = lookupInformation(state.http, query);
       for (const p of found.passages) state.sources.set(p.url, p.title);
+      state.prices.push(...found.price_points);
       return remember(state, found);
     }
     case 'spending_budget':

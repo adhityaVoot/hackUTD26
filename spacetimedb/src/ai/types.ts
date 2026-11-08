@@ -16,7 +16,8 @@ export type FeatureKind =
   | 'health' // PNC: the six vitals explained, with the best next move
   | 'briefing' // Proactive: forecast + obligations + risks, run on a schedule; Sentinel mode proposes a fix
   | 'coach' // Conversational coach: Nemotron routes the message to one of the features above
-  | 'clarify'; // The coach needs more detail before it can answer confidently: it asks questions instead
+  | 'clarify' // The coach needs more detail before it can answer confidently: it asks questions instead
+  | 'debate'; // Advocate and Skeptic agents argue a decision from the simulation; a Judge decides
 
 export const FEATURE_KINDS: FeatureKind[] = [
   'twin',
@@ -229,6 +230,7 @@ export interface ScenarioDraft {
   title: string;
   levers: ResolvedLever[];
   diff: TwinDiff;
+  series?: { day: number; balance: number }[]; // weekly expected household cash, next 12 months
 }
 
 export interface InsightResult {
@@ -241,6 +243,8 @@ export interface InsightResult {
   scenarios: ScenarioDraft[]; // forks the agent built; the first one becomes a draft scenario row
   extra?: Record<string, unknown>; // feature-specific structured payload (chain, assumptions, opportunities...)
   followUp?: string; // the coach's question back to the member, for a conversational reply
+  baselineSeries?: { day: number; balance: number }[]; // weekly expected cash without any change, for charts
+  review?: { verdict: 'approved' | 'revised' | 'skipped'; issues: string[] }; // the Reviewer agent's pass
   sources?: { title: string; url: string }[]; // web pages a cited price came from
   source: 'nemotron' | 'fallback';
   model?: string;

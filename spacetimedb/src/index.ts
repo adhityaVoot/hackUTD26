@@ -662,6 +662,7 @@ export const renewGrant = spacetimedb.reducer(
 // reducer stays the co-owner kill switch.
 export const {
   askCoach,
+  debateDecision,
   requestHealthCheck,
   requestBriefing,
   startNemotronWatch,

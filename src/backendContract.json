@@ -147,6 +147,21 @@
     ],
     "request_mediation": [
       "negotiationId"
+    ],
+    "stress_test": [
+      "scenario"
+    ],
+    "simulate_ripple": [
+      "decision"
+    ],
+    "simulate_life_event": [
+      "event"
+    ],
+    "request_health_check": [],
+    "scan_opportunities": [],
+    "request_briefing": [],
+    "debate_decision": [
+      "decision"
     ]
   },
   "views": [
