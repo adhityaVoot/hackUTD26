@@ -1,10 +1,13 @@
 # Nemotron navigator (`spacetimedb/src/ai/`)
 
-Seven agent features on NVIDIA Nemotron, running entirely inside the SpacetimeDB module.
+Agent features on NVIDIA Nemotron, running entirely inside the SpacetimeDB module.
 The model plans and explains; a deterministic engine computes every number; humans co-sign.
 
 | Feature | Reducer | What Nemotron does |
 |---|---|---|
+| Conversational Coach | `ask_coach(message, threadInsightId)` | Reads the message and earlier turns, picks the workflow below that answers it, rewrites follow-ups ("what about July?") as full requests, then runs it |
+| Health Check | `request_health_check()` | Explains the six vitals and the score in plain English, simulates candidate moves, recommends the best one |
+| Household Briefing / Sentinel | `request_briefing()`, plus the scheduled watch | Narrates the 60-day forecast and upcoming bills. Runs on its own each simulated week; when overdraft risk passes 25% it must simulate a fix that brings it under 10% |
 | Financial Digital Twin | `ask_twin(question)` | Turns "can we afford X?" into levers, simulates it and alternatives, returns a verdict + fork |
 | Ripple Effect | `simulate_ripple(decision)` | Simulates one decision and narrates the chain: cash, bills, buffer, risk, goals, vitals |
 | Negotiation Room | `open_negotiation`, `submit_position`, `request_mediation`, `close_negotiation` | Simulates each member's position, finds the real conflict, designs and simulates compromises |
@@ -12,6 +15,10 @@ The model plans and explains; a deterministic engine computes every number; huma
 | Life Event Simulator | `simulate_life_event(event)` | Turns an event into dated assumptions, one combined fork, a savings target and a checklist |
 | Financial Memory | `ask_memory(question)`, `record_decision(...)` | Retrieves past decisions and the reasons recorded at the time; cites them |
 | Opportunity Radar | `scan_opportunities()` | Ranks code-detected opportunities (price increases, duplicate subs, APR, idle cash, bill timing, spikes) |
+
+Sentinel watch (no prompt needed): `start_nemotron_watch(adminCode, everySeconds)` starts a repeating
+timer; each tick forecasts every household and starts a briefing (weekly) or a Sentinel run (risk > 25%).
+`stop_nemotron_watch(adminCode)` stops it.
 
 Also: `share_insight(insightId)` (requester promotes a private answer to the household feed),
 `set_ai_enabled(enabled)` (co-owner kill switch), `seed_nemotron_demo(adminCode, householdId)` (demo decision log).
@@ -26,7 +33,9 @@ Also: `share_insight(insightId)` (requester promotes a private answer to the hou
    and goals become tokens. Raw descriptions and merchant names are dropped.
 3. **Agent loop** (`agent.ts`, over `ctx.http.fetch`): Nemotron calls tools (`tools.ts`):
    `get_household_overview`, `get_forecast_summary`, `get_vitals`, `simulate_scenario`,
-   `required_monthly_savings`, `search_memory`, `find_opportunities`. `simulate_scenario` validates every lever and
+   `required_monthly_savings`, `search_memory`, `find_opportunities`, and `check_bank`, which calls
+   Capital One's Nessie API live to compare bank balances with the ledger and find bills missing from
+   the forecast (needs `NESSIE_API_KEY`; otherwise it reports that bank sync isn't configured). `simulate_scenario` validates every lever and
    returns the exact before/after diff from the twin (`twin.ts`).
 4. **Verify** (`features.ts`): every sim id, reference and number is checked against engine output.
    The model writes numbers as slots (`{sim_1.lowest_cash_after}`) that the engine fills.
@@ -59,8 +68,11 @@ Module env (set like the existing `AI_*` keys):
 | `AI_MODEL` | `nvidia/nemotron-3.5-lightning-30b-a3b` |
 | `AI_NO_THINK` | `true` (reasoning off; set `false` to let Nemotron reason) |
 | `AI_FALLBACK_API_KEY` / `_BASE_URL` / `_MODEL` | optional second provider |
+| `NESSIE_API_KEY` / `NESSIE_BASE_URL` | enables the `check_bank` tool (default base `http://api.nessieisreal.com`) |
 
-Get a key at build.nvidia.com. Use a spend-capped key and revoke it after the event.
+Set these in `spacetime.local.json` at the repo root (gitignored) under `"env"`; Spacetime applies them on publish.
+
+Get a key at build.nvidia.com. Default model: `nvidia/nemotron-3.5-lightning-30b-a3b`. Use a spend-capped key and revoke it after the event.
 
 ## For the client
 

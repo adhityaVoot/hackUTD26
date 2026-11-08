@@ -33,6 +33,18 @@ export const decisionMemory = table({ name: 'decision_memory' }, {   // append-o
   createdAt: t.timestamp(),
 });
 
+// Sentinel / Household Briefing: a repeating timer, plus what each household was last briefed on.
+export const nemotronWatch = table({ name: 'nemotron_watch' }, {
+  scheduledId: t.u64().primaryKey().autoInc(),
+  scheduledAt: t.scheduleAt(),
+});
+
+export const nemotronWatchState = table({ name: 'nemotron_watch_state' }, {
+  householdId: t.u64().primaryKey(),
+  lastBriefingDay: t.i32(),               // sim day of the last weekly briefing
+  lastSentinelDay: t.i32(),               // sim day of the last crunch alert
+});
+
 export const negotiation = table({ name: 'negotiation' }, {
   id: t.u64().primaryKey().autoInc(),
   householdId: t.u64().index('btree'),

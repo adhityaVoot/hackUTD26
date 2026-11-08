@@ -12,7 +12,10 @@ export type FeatureKind =
   | 'stress' // 4. AI Financial Stress Testing: hypothetical emergencies
   | 'life_event' // 5. Life Event Simulator: event -> assumptions -> scenario
   | 'memory' // 6. Financial Memory: why did we decide X?
-  | 'opportunity'; // 7. Opportunity Radar
+  | 'opportunity' // 7. Opportunity Radar
+  | 'health' // PNC: the six vitals explained, with the best next move
+  | 'briefing' // Proactive: forecast + obligations + risks, run on a schedule; Sentinel mode proposes a fix
+  | 'coach'; // Conversational coach: Nemotron routes the message to one of the features above
 
 export const FEATURE_KINDS: FeatureKind[] = [
   'twin',
@@ -22,7 +25,13 @@ export const FEATURE_KINDS: FeatureKind[] = [
   'life_event',
   'memory',
   'opportunity',
+  'health',
+  'briefing',
+  'coach',
 ];
+
+/** Features the coach can route a message to. */
+export const ROUTABLE: FeatureKind[] = ['twin', 'ripple', 'stress', 'life_event', 'memory', 'opportunity', 'health', 'briefing'];
 
 export type Visibility = 'full' | 'summary' | 'signal';
 

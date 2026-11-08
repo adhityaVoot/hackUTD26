@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runAgent } from '../agent';
+import { routeCoach, runAgent } from '../agent';
 import { DEFAULT_BASE_URL, DEFAULT_MODEL, type HttpLike } from '../model';
 import { isoToDay } from '../dates';
 import { buildSnapshot } from '../snapshot';
@@ -57,6 +57,10 @@ const cases: [FeatureKind, string, Record<string, unknown>?][] = [
   ['life_event', "We're planning to get married next year. What should we prepare for?"],
   ['memory', 'Why did we decide against buying a car last November?'],
   ['opportunity', 'Find opportunities in our accounts and bills'],
+  ['health', 'How is our financial health?'],
+  ['briefing', 'Weekly briefing', { mode: 'weekly' }],
+  ['briefing', 'Overdraft risk is high. What should we do?', { mode: 'sentinel' }],
+  ['coach', 'What if we did the Japan trip in July instead of March?', { history: [{ question: 'Can we afford a $3,200 Japan trip in March?', answer: 'Yes, with trade-offs: the house goal moves 28 days later.' }] }],
   ['negotiation', 'Spring spending', { topic: 'Spring spending', positions: [{ member: 'A', want: 'Send Maya $350 a month for rent through May', priority: 4 }, { member: 'B', want: 'Japan trip in March, about $3,200', priority: 3 }] }],
 ];
 
@@ -65,17 +69,35 @@ const LIVE = !!KEY && process.env.NEMOTRON_LIVE === '1';
 
 describe.skipIf(!LIVE)('live Nemotron', () => {
   for (const [feature, q, ctx] of cases) {
+    const label = ctx?.mode === 'sentinel' ? 'sentinel' : feature;
     it(
-      feature,
+      label,
       () => {
-        const requester = feature === 'negotiation' ? 0n : 1n;
-        const s = newState(feature, buildSnapshot(patelInput(requester)), q, memory, ctx ?? {});
-        const out = runAgent(s, {
+        const deps = {
           http: curlHttp,
           primary: { baseUrl: process.env.NEMOTRON_BASE_URL ?? DEFAULT_BASE_URL, apiKey: KEY!, model: process.env.NEMOTRON_MODEL ?? DEFAULT_MODEL, noThink: process.env.NEMOTRON_THINK !== '1' },
           secondary: null,
-        });
-        console.log(`\n===== ${feature} [${out.status}] ${out.modelCalls} calls, ${out.promptTokens}+${out.completionTokens} tokens`);
+        };
+        const householdView = feature === 'negotiation' || feature === 'briefing';
+        // Sentinel needs a crunch: a cash-strapped version of the household.
+        const input = patelInput(householdView ? 0n : 1n);
+        if (label === 'sentinel') {
+          input.accounts = input.accounts.map(a => (a.id === 10n ? { ...a, balanceCents: 90_000n } : a.id === 11n ? { ...a, balanceCents: 20_000n } : a.id === 13n ? { ...a, balanceCents: 10_000n } : a));
+        }
+        const snap = buildSnapshot(input);
+        let run: FeatureKind = feature;
+        let request = q;
+        const pre: string[] = [];
+        if (feature === 'coach') {
+          const route = routeCoach(q, (ctx?.history as { question: string; answer: string }[]) ?? [], snap.map.nameToToken, deps);
+          run = route.feature;
+          request = route.request;
+          pre.push(...route.steps.map(x => `  ${x.step}: ${x.detail}`));
+        }
+        const s = newState(run, snap, request, memory, feature === 'coach' ? {} : ctx ?? {});
+        const out = runAgent(s, deps);
+        console.log(`\n===== ${label}${feature === 'coach' ? ` -> ${run}` : ''} [${out.status}] ${out.modelCalls} calls, ${out.promptTokens}+${out.completionTokens} tokens`);
+        for (const line of pre) console.log(line);
         for (const st of out.steps) console.log(`  ${st.flagged ? '!' : ' '} ${st.step}: ${st.detail}`);
         console.log(`  -> ${out.result.title}${out.result.verdict ? ` [${out.result.verdict}]` : ''}\n  ${out.result.answer}`);
         for (const sec of out.result.sections) console.log(`  # ${sec.heading}\n${sec.items.map(i => `    - ${i}`).join('\n')}`);

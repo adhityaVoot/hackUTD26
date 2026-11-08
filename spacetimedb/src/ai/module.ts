@@ -17,8 +17,10 @@ import { runAgent } from './agent';
 import { DEFAULT_BASE_URL, DEFAULT_MODEL, type HttpLike, type ModelConfig } from './model';
 import { buildSnapshot, type SnapshotInput, type Snapshot } from './snapshot';
 import type { MemoryRow } from './memory';
-import { aiInsight, decisionMemory, negotiation, negotiationPosition } from './tables';
-import { describeLever, newState } from './tools';
+import { aiInsight, decisionMemory, negotiation, negotiationPosition, nemotronWatch } from './tables';
+import { describeLever, newState, type BankLookup } from './tools';
+import { routeCoach, type CoachTurn } from './agent';
+import { simulate } from './twin';
 import type { FeatureKind, InsightResult, ResolvedLever } from './types';
 
 const RATE_WINDOW_MICROS = 60n * 60n * 1_000_000n; // 1 hour
@@ -39,6 +41,8 @@ function cleanText(text: string, field: string, min = 3, max = 600): string {
 }
 
 function rateLimit(ctx: Ctx, householdId: bigint): void {
+  const inflightNow = [...ctx.db.aiInsight.householdId.filter(householdId)].filter(i => i.status === 'thinking').length;
+  if (inflightNow >= MAX_INFLIGHT) throw new SenderError('The navigator is still working on earlier questions.');
   const now = ctx.timestamp.microsSinceUnixEpoch;
   const row = ctx.db.aiUsage.householdId.find(householdId);
   if (!row || now - row.windowStart.microsSinceUnixEpoch > RATE_WINDOW_MICROS) {
@@ -48,12 +52,16 @@ function rateLimit(ctx: Ctx, householdId: bigint): void {
     if (row.count >= RATE_LIMIT) throw new SenderError('The household has reached its hourly limit for the navigator. Try again later.');
     ctx.db.aiUsage.householdId.update({ ...row, count: row.count + 1 });
   }
-  const inflight = [...ctx.db.aiInsight.householdId.filter(householdId)].filter(i => i.status === 'thinking').length;
-  if (inflight >= MAX_INFLIGHT) throw new SenderError('The navigator is still working on earlier questions.');
 }
 
 function enqueue(ctx: Ctx, me: Me, kind: FeatureKind, question: string, audiencePersonId: bigint, context: Record<string, string> = {}) {
-  rateLimit(ctx, me.household.id);
+  return enqueueFor(ctx, me.household.id, me.person.id, kind, question, audiencePersonId, context);
+}
+
+/** requesterPersonId 0 = started by the agent itself (Sentinel / scheduled briefing). */
+function enqueueFor(ctx: Ctx, householdId: bigint, requesterPersonId: bigint, kind: FeatureKind, question: string, audiencePersonId: bigint, context: Record<string, string> = {}) {
+  rateLimit(ctx, householdId);
+  const me = { household: { id: householdId }, person: { id: requesterPersonId } };
   const run = ctx.db.aiRun.insert({
     id: 0n,
     householdId: me.household.id,
@@ -123,6 +131,8 @@ interface Loaded {
   secondary: ModelConfig | null;
   labels: { persons: Map<bigint, string>; accounts: Map<bigint, string>; goals: Map<bigint, string>; obligations: Map<bigint, string> };
   salt: number;
+  history: CoachTurn[]; // earlier turns of a coach thread
+  bank: { baseUrl: string; key: string } | null;
 }
 
 function modelConfigs(tx: Ctx, aiEnabled: boolean): { primary: ModelConfig | null; secondary: ModelConfig | null } {
@@ -169,27 +179,21 @@ function loadJob(tx: Ctx, runId: bigint): Loaded | null {
     if (neg) tx.db.negotiation.id.update({ ...neg, status: 'mediating', insightId: insight.id });
   }
 
-  const snapInput: SnapshotInput = {
-    today,
-    nowMicros: tx.timestamp.microsSinceUnixEpoch,
-    requesterPersonId: requester,
-    persons: persons.map(p => ({ id: p.id, displayName: p.displayName, role: p.role })),
-    accounts: [...tx.db.account.householdId.filter(hid)],
-    grants: [...tx.db.grant.householdId.filter(hid)].map(g => ({
-      accountId: g.accountId,
-      granteePersonId: g.granteePersonId,
-      level: g.level,
-      status: g.status,
-      expiresAtMicros: g.expiresAt.microsSinceUnixEpoch,
-    })),
-    obligations: [...tx.db.obligation.householdId.filter(hid)],
-    txns: [...tx.db.txn.householdId.filter(hid)].filter(x => x.day > today - 180 && x.day <= today),
-    spendProfiles: [...tx.db.spendProfile.householdId.filter(hid)],
-    goals: [...tx.db.goal.householdId.filter(hid)],
-  };
+  const snapInput = snapshotInputFor(tx, hid, requester, today);
+  if (kind === 'briefing') context.mode = ctxIn.mode === 'sentinel' ? 'sentinel' : 'weekly';
 
   const memoryRows: MemoryRow[] =
-    kind === 'memory' || kind === 'negotiation' ? [...tx.db.decisionMemory.householdId.filter(hid)] : [];
+    kind === 'memory' || kind === 'negotiation' || kind === 'coach' ? [...tx.db.decisionMemory.householdId.filter(hid)] : [];
+
+  // Coach threads: earlier turns by the same requester, oldest first.
+  const history: CoachTurn[] = [];
+  if (kind === 'coach' && ctxIn.threadId) {
+    const turns = [...tx.db.aiInsight.householdId.filter(hid)]
+      .filter(i => i.id !== insight.id && i.requesterPersonId === run.requesterPersonId && (String(i.id) === ctxIn.threadId || JSON.parse(i.contextJson || '{}').threadId === ctxIn.threadId) && i.resultJson)
+      .sort((a, b) => Number(a.id - b.id));
+    for (const i of turns.slice(-3)) history.push({ question: i.question, answer: String(JSON.parse(i.resultJson).answer ?? '') });
+  }
+  const nessieKey = envValue(tx, 'NESSIE_API_KEY');
 
   const { primary, secondary } = modelConfigs(tx, household.aiEnabled);
   return {
@@ -213,6 +217,69 @@ function loadJob(tx: Ctx, runId: bigint): Loaded | null {
     },
     // Fresh token salt per job so tokens can't be correlated across jobs.
     salt: Number(tx.timestamp.microsSinceUnixEpoch % 9973n),
+    history,
+    bank: nessieKey ? { baseUrl: envValue(tx, 'NESSIE_BASE_URL') ?? 'http://api.nessieisreal.com', key: nessieKey } : null,
+  };
+}
+
+function snapshotInputFor(tx: Ctx, hid: bigint, requester: bigint, today: number): SnapshotInput {
+  return {
+    today,
+    nowMicros: tx.timestamp.microsSinceUnixEpoch,
+    requesterPersonId: requester,
+    persons: [...tx.db.person.householdId.filter(hid)].map(p => ({ id: p.id, displayName: p.displayName, role: p.role })),
+    accounts: [...tx.db.account.householdId.filter(hid)],
+    grants: [...tx.db.grant.householdId.filter(hid)].map(g => ({
+      accountId: g.accountId,
+      granteePersonId: g.granteePersonId,
+      level: g.level,
+      status: g.status,
+      expiresAtMicros: g.expiresAt.microsSinceUnixEpoch,
+    })),
+    obligations: [...tx.db.obligation.householdId.filter(hid)],
+    txns: [...tx.db.txn.householdId.filter(hid)].filter(x => x.day > today - 180 && x.day <= today),
+    spendProfiles: [...tx.db.spendProfile.householdId.filter(hid)],
+    goals: [...tx.db.goal.householdId.filter(hid)],
+  };
+}
+
+/** Live Nessie lookups for the check_bank tool. Nessie ids stay in the module; only tokens and amounts reach the agent. */
+function nessieBank(http: HttpLike, cfg: { baseUrl: string; key: string }, snap: Snapshot, accounts: SnapshotInput['accounts']): BankLookup {
+  const nessieIdOf = (token: string) => {
+    const id = snap.map.accounts.get(token);
+    return accounts.find(a => a.id === id)?.nessieId ?? '';
+  };
+  const get = (path: string): unknown => {
+    const res = http.fetch(`${cfg.baseUrl.replace(/\/$/, '')}${path}${path.includes('?') ? '&' : '?'}key=${encodeURIComponent(cfg.key)}`, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      body: '',
+      timeout: TimeDuration.fromMillis(10_000),
+    });
+    if (res.status < 200 || res.status >= 300) throw new Error(`bank returned HTTP ${res.status}`);
+    return JSON.parse(res.text());
+  };
+  return {
+    account(token) {
+      const nid = nessieIdOf(token);
+      if (!nid) return { error: 'not linked to the bank' };
+      try {
+        const a = get(`/accounts/${encodeURIComponent(nid)}`) as { balance?: number };
+        return typeof a.balance === 'number' ? { balance: a.balance } : { error: 'bank returned no balance' };
+      } catch (e) {
+        return { error: String(e).slice(0, 80) };
+      }
+    },
+    bills(token) {
+      const nid = nessieIdOf(token);
+      if (!nid) return { error: 'not linked to the bank' };
+      try {
+        const list = get(`/accounts/${encodeURIComponent(nid)}/bills`) as { payment_amount?: number; upcoming_payment_date?: string; payment_date?: string; status?: string }[];
+        return (Array.isArray(list) ? list : []).map(b => ({ amount: Number(b.payment_amount) || 0, date: String(b.upcoming_payment_date ?? b.payment_date ?? ''), status: String(b.status ?? '') }));
+      } catch (e) {
+        return { error: String(e).slice(0, 80) };
+      }
+    },
   };
 }
 
@@ -393,6 +460,75 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
     add(40, 'merged', 'Monthly top-up for Maya', 'Agreed to send $250 on the 1st each month during the semester instead of ad-hoc transfers.', 'maya student allowance transfer college', 25_000n);
   });
 
+  // ----- Conversational coach, Health Check, Briefing -----
+  /** One chat box: Nemotron routes the message to the right workflow. Pass the first insight id of a thread to follow up. */
+  const askCoach = spacetimedb.reducer({ message: t.string(), threadInsightId: t.u64() }, (ctx, { message, threadInsightId }) => {
+    const me = requireMember(ctx);
+    let threadId = '';
+    if (threadInsightId !== 0n) {
+      const first = ctx.db.aiInsight.id.find(threadInsightId);
+      if (!first || first.householdId !== me.household.id || first.requesterPersonId !== me.person.id) throw new SenderError('Conversation not found');
+      threadId = (JSON.parse(first.contextJson || '{}') as Record<string, string>).threadId || String(first.id);
+    }
+    const ins = enqueue(ctx, me, 'coach', cleanText(message, 'message'), me.person.id, threadId ? { threadId } : {});
+    if (!threadId) ctx.db.aiInsight.id.update({ ...ins, contextJson: JSON.stringify({ threadId: String(ins.id) }) });
+  });
+
+  const requestHealthCheck = spacetimedb.reducer(ctx => {
+    const me = requireMember(ctx);
+    enqueue(ctx, me, 'health', 'How is our financial health?', me.person.id);
+  });
+
+  const requestBriefing = spacetimedb.reducer(ctx => {
+    const me = requireMember(ctx);
+    enqueueFor(ctx, me.household.id, me.person.id, 'briefing', 'What does the next 60 days look like?', 0n, { mode: 'weekly' });
+  });
+
+  // ----- Sentinel: the agent starts work on its own, no prompt -----
+  /** Admin: start the watch. It checks every household on each tick. */
+  const startNemotronWatch = spacetimedb.reducer({ adminCode: t.string(), everySeconds: t.u32() }, (ctx, { adminCode, everySeconds }) => {
+    requireAdmin(ctx, adminCode);
+    for (const row of [...ctx.db.nemotronWatch.iter()]) ctx.db.nemotronWatch.scheduledId.delete(row.scheduledId);
+    const secs = BigInt(Math.max(30, everySeconds));
+    ctx.db.nemotronWatch.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.interval(secs * 1_000_000n) });
+  });
+
+  const stopNemotronWatch = spacetimedb.reducer({ adminCode: t.string() }, (ctx, { adminCode }) => {
+    requireAdmin(ctx, adminCode);
+    for (const row of [...ctx.db.nemotronWatch.iter()]) ctx.db.nemotronWatch.scheduledId.delete(row.scheduledId);
+  });
+
+  /**
+   * Each tick: forecast every household (household view, deterministic engine). If peak overdraft
+   * risk crosses 25%, start a Sentinel run that must propose a fix; otherwise post a briefing each
+   * simulated week. Runs go to the household feed and use the normal rate limit.
+   */
+  const nemotronWatchTick = spacetimedb.reducer({ onSchedule: nemotronWatch }, { arg: nemotronWatch.rowType }, (ctx, _args) => {
+    for (const h of [...ctx.db.household.iter()]) {
+      const state = ctx.db.nemotronWatchState.householdId.find(h.id) ?? { householdId: h.id, lastBriefingDay: -1_000_000, lastSentinelDay: -1_000_000 };
+      let risk = 0;
+      try {
+        risk = simulate(buildSnapshot(snapshotInputFor(ctx, h.id, 0n, h.simDay)).twin).peakCrunchRisk;
+      } catch {
+        continue; // household not seeded yet
+      }
+      const next = { ...state };
+      try {
+        if (risk > 0.25 && h.simDay - state.lastSentinelDay >= 3) {
+          enqueueFor(ctx, h.id, 0n, 'briefing', `Overdraft risk is ${Math.round(risk * 100)}%. What should we do?`, 0n, { mode: 'sentinel' });
+          next.lastSentinelDay = h.simDay;
+        } else if (h.simDay - state.lastBriefingDay >= 7) {
+          enqueueFor(ctx, h.id, 0n, 'briefing', 'Weekly briefing', 0n, { mode: 'weekly' });
+          next.lastBriefingDay = h.simDay;
+        } else continue;
+      } catch {
+        continue; // rate limited or busy: try again next tick
+      }
+      if (ctx.db.nemotronWatchState.householdId.find(h.id)) ctx.db.nemotronWatchState.householdId.update(next);
+      else ctx.db.nemotronWatchState.insert(next);
+    }
+  });
+
   // ----- The agent procedure -----
   const runAiJob = spacetimedb.procedure({ onSchedule: aiJob }, { job: aiJob.rowType }, t.unit(), (ctx, { job }) => {
     const loaded = ctx.withTx(tx => loadJob(tx, job.runId));
@@ -405,15 +541,30 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
     let snap: Snapshot;
     try {
       snap = buildSnapshot(loaded.snapInput, loaded.salt);
-      const state = newState(loaded.kind, snap, loaded.question, loaded.memoryRows, loaded.context);
       const http: HttpLike = {
-        fetch: (url, init) => ctx.http.fetch(url, { method: init.method, headers: init.headers, body: init.body, timeout: TimeDuration.fromMillis(MODEL_TIMEOUT_MS) }),
+        fetch: (url, init) =>
+          ctx.http.fetch(url, { method: init.method, headers: init.headers, body: init.method === 'GET' ? undefined : init.body, timeout: (init.timeout as TimeDuration | undefined) ?? TimeDuration.fromMillis(MODEL_TIMEOUT_MS) }),
       };
-      const outcome = runAgent(state, { http, primary: loaded.primary, secondary: loaded.secondary });
+      const deps = { http, primary: loaded.primary, secondary: loaded.secondary };
+      // Conversational coach: Nemotron first decides which workflow answers the message.
+      let feature = loaded.kind;
+      let request = loaded.question;
+      let routeSteps: { step: string; detail: string; flagged: boolean }[] = [];
+      if (feature === 'coach') {
+        const route = routeCoach(loaded.question, loaded.history, snap.map.nameToToken, deps);
+        feature = route.feature;
+        request = route.request;
+        routeSteps = route.steps;
+      }
+      const state = newState(feature, snap, request, loaded.memoryRows, loaded.context);
+      if (loaded.bank) state.bank = nessieBank(http, loaded.bank, snap, loaded.snapInput.accounts);
+      state.steps.push(...routeSteps);
+      const outcome = runAgent(state, deps);
       result = outcome.result;
       status = outcome.status;
       steps = outcome.steps;
       audit = outcome.auditPayload;
+      if (loaded.kind === 'coach') result.extra = { ...(result.extra ?? {}), routedTo: feature, threadTurns: loaded.history.length + 1 };
       steps.push({ step: 'usage', detail: `${outcome.modelCalls} model call(s), ${outcome.promptTokens} prompt + ${outcome.completionTokens} completion tokens`, flagged: false });
     } catch (e) {
       ctx.withTx(tx => {
@@ -442,7 +593,7 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
           householdId: loaded.householdId,
           parentId: loaded.baselineScenarioId,
           authorPersonId: 0n,
-          agentKind: loaded.kind === 'negotiation' ? 'mediator' : 'coach',
+          agentKind: loaded.kind === 'negotiation' ? 'mediator' : loaded.kind === 'briefing' ? 'sentinel' : 'coach',
           title: String(humanize(d.title)).slice(0, 80),
           explanation: String(humanize(result.answer)).slice(0, 600),
           status: 'draft',
@@ -539,6 +690,12 @@ export function registerNemotron(spacetimedb: typeof Spacetimedb) {
   });
 
   return {
+    askCoach,
+    requestHealthCheck,
+    requestBriefing,
+    startNemotronWatch,
+    stopNemotronWatch,
+    nemotronWatchTick,
     askTwin,
     simulateRipple,
     stressTest,

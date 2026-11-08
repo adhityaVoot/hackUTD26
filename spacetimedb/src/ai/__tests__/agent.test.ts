@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { runAgent } from '../agent';
 import type { ChatMessage, HttpLike, ModelConfig } from '../model';
 import { buildSnapshot } from '../snapshot';
-import { newState } from '../tools';
+import { executeTool, newState } from '../tools';
 import type { FeatureKind } from '../types';
 import { isoToDay } from '../dates';
 import { patelInput } from './fixture';
@@ -169,5 +169,70 @@ describe('verification, round 2', () => {
     expect(failed).toMatch(/mitigations\[0\]\.sim_id/);
     expect(out.status).toBe('done');
     expect(out.result.answer).toMatch(/^Cash bottoms at \$[\d,]+\.$/);
+  });
+});
+
+import { routeCoach } from '../agent';
+import { checkBank } from '../tools';
+
+describe('new Nemotron features', () => {
+  it('coach: Nemotron routes a follow-up using the conversation, and rules take over when the model is off', () => {
+    const http = fakeHttp([() => ({ body: final({ workflow: 'twin', request: 'Can we afford the Japan trip if we wait until July 2027?' }) })]);
+    const r = routeCoach('What if we waited until July?', [{ question: 'Can we afford a $3,200 Japan trip in March?', answer: 'Yes, with trade-offs.' }], new Map([['sam', 'B']]), { http, primary: cfg, secondary: null });
+    expect(r.feature).toBe('twin');
+    expect(r.request).toContain('July 2027');
+    expect(http.sent[0].messages[1].content).toContain('Japan trip in March');
+    const off = routeCoach('What happens if Sam loses his job?', [], new Map([['sam', 'B']]), { http, primary: null, secondary: null });
+    expect(off.feature).toBe('stress');
+    expect(off.request).toContain('member B');
+  });
+
+  it('health check: verifies indicator names and a simulated best move', () => {
+    const http = fakeHttp([
+      () => ({ body: toolCall('simulate_scenario', { title: 'Pay down the card', levers: [{ kind: 'extra_payment', loan: buildSnapshot(patelInput()).twin.accounts.find(a => a.kind === 'credit_card')!.token, amount: 1000, date: '2026-11-20' }] }) }),
+      () => ({ body: final({ title: 'Health', answer: 'Mostly healthy; card use is the weak spot.', indicators: [{ vital: 'runway', meaning: 'Months of bills covered.' }, { vital: 'utilization', meaning: 'Card limits in use.' }, { vital: 'dti', meaning: 'Income going to debt.' }], best_move_sim: 'sim_1', best_move_why: 'It lowers card use.' }) }),
+    ]);
+    const out = runAgent(state('health', 'How are we doing?'), { http, primary: cfg, secondary: null });
+    expect(out.status).toBe('done');
+    expect(out.result.highlights).toHaveLength(7);
+    expect(out.result.sections[0].items[0]).toMatch(/^Cash runway \(3\.\d months\)/);
+  });
+
+  it('sentinel briefing must cite a fix that lowers risk; the fallback finds one itself', () => {
+    const s = state('briefing', 'Overdraft risk is high', { mode: 'sentinel' });
+    const http = fakeHttp([() => ({ body: final({ title: 'Crunch', answer: 'Risk is high.', upcoming: [], watch_out: [] }) })]);
+    const out = runAgent(s, { http, primary: cfg, secondary: null, maxRetries: 0 });
+    expect(out.steps.some(x => x.step === 'verify' && /fix_sim must be a sim_id/.test(x.detail))).toBe(true);
+    expect(out.status).toBe('fallback');
+  });
+
+  it('rejects advice to pause debt payments', () => {
+    const http = fakeHttp([
+      () => ({ body: toolCall('simulate_scenario', { title: 'Job loss', levers: [{ kind: 'income_change', member: 'B', percent: -100, start_date: '2026-11-10', end_date: '2027-01-10', label: 'Job loss' }] }) }),
+      () => ({ body: final({ title: 'Job loss', answer: 'Pause the Visa autopay for two months.', scenarios: [{ sim_id: 'sim_1', name: 'Job loss', severity: 'expected' }], weakest_point: 'January.', mitigations: [] }) }),
+    ]);
+    const out = runAgent(state('stress', 'job loss'), { http, primary: cfg, secondary: null, maxRetries: 0 });
+    expect(out.steps.some(x => x.step === 'verify' && /never paused/.test(x.detail))).toBe(true);
+  });
+
+  it('check_bank cross-checks live balances and finds bills missing from the forecast', () => {
+    const s = state('twin', 'x');
+    expect(checkBank(s)).toMatchObject({ available: false });
+    const joint = s.snap.twin.accounts.find(a => a.kind === 'checking' && a.owner === 'joint')!.token;
+    s.bank = {
+      account: tok => (tok === joint ? { balance: 4100 } : { error: 'not linked to the bank' }),
+      bills: tok => (tok === joint ? [{ amount: 2350, date: '2026-12-01', status: 'recurring' }, { amount: 99, date: '2026-11-20', status: 'pending' }] : { error: 'x' }),
+    };
+    const r = checkBank(s) as any;
+    expect(r.accounts.find((a: any) => a.account === joint)).toMatchObject({ ledger_balance: 4200, bank_balance: 4100, difference: -100, in_sync: false });
+    expect(r.bills_not_in_forecast).toEqual([{ account: joint, amount: 99, date: '2026-11-20', status: 'pending' }]);
+  });
+
+  it('ripple results say where cash is on the decision day and whether the low point moved', () => {
+    const s = state('ripple', 'x');
+    const out = executeTool(s, 'simulate_scenario', { title: 'Laptop', levers: [{ kind: 'one_time', amount: 1500, date: '2026-11-14', label: 'Laptop' }] }) as any;
+    expect(out.cash_on_decision_date_before - out.cash_on_decision_date_after).toBe(1500);
+    expect(out.lowest_point_moved).toBe(false);
+    expect(out.cushion_above_buffer_after).toBe(out.lowest_cash_after - 800);
   });
 });

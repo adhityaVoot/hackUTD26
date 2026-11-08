@@ -1,7 +1,7 @@
 // Per-feature finalization (validate Nemotron's JSON against engine state) and deterministic
 // fallbacks (same engine, templated words) for when the model is off, down, or fails checks.
 
-import { dayToIso, dayToLabel } from './dates';
+import { dayToIso, dayToLabel, nextOccurrence } from './dates';
 import { checkNumbers } from './gateway';
 import { decisionLever, lifeEventAssumptions, parseWhen, shortLabel, stressPlans } from './intent';
 import { DISCLAIMER } from './prompts';
@@ -110,6 +110,9 @@ class Checker {
     if (!nc.ok) this.errors.push(`${field} uses numbers no tool returned (${nc.unsupported.slice(0, 4).join(', ')}); use slots like {sim_1.lowest_cash_after} instead`);
     const filled = fillSlots(raw, this.state);
     if (filled.unknown.length) this.errors.push(`${field} has unknown slots ${filled.unknown.slice(0, 3).join(', ')}`);
+    if (/\b(pause|skip|stop paying|suspend)\b[^.]{0,40}\b(visa|card|mortgage|loan|insurance|autopay|car payment)\b/i.test(raw)) {
+      this.errors.push(`${field} suggests pausing a debt or insurance payment; those can only be moved (e.g. after payday), never paused`);
+    }
     // Internal field names ("household_cash_now") mean the model pasted a key instead of a value.
     const fieldName = filled.text.replace(/\{[^}]*\}/g, '').match(/\b(?!(?:acct|obl|goal|sim|mem|opp)_)[a-z]+_[a-z_0-9]+\b/);
     if (fieldName) this.errors.push(`${field} contains the field name "${fieldName[0]}"; write plain English or use a {slot}`);
@@ -278,6 +281,47 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
       r.extra = { cited: cited.map((m: string) => state.memoryHits.get(m)) };
       break;
     }
+    case 'health': {
+      const valid = ['runway', 'crunch_risk', 'dti', 'utilization', 'savings_rate', 'goal_track'];
+      const indicators = (Array.isArray(parsed.indicators) ? parsed.indicators : []).slice(0, 6).map((x: any, i: number) => ({
+        vital: valid.includes(x?.vital) ? x.vital : '',
+        meaning: c.text(`indicators[${i}].meaning`, x?.meaning, true, 300),
+      }));
+      if (indicators.filter((x: any) => x.vital).length < 3) c.errors.push('explain at least three of the six indicators, using their exact names');
+      const best = c.sim('best_move_sim', parsed.best_move_sim);
+      const why = c.text('best_move_why', parsed.best_move_why, false, 300);
+      const vit = state.baseline.vitals;
+      r.highlights = vit.map(v => ({ label: VITAL_LABEL[v.key], value: v.display, direction: v.band === 'green' ? 'better' : v.band === 'red' ? 'worse' : 'neutral' }));
+      r.sections.push({ heading: 'Your vitals', items: indicators.filter((x: any) => x.vital).map((x: any) => `${VITAL_LABEL[x.vital]} (${vit.find(v => v.key === x.vital)!.display}): ${x.meaning}`) });
+      if (best) {
+        r.scenarios = [draft(best)];
+        r.sections.push({ heading: 'Best next move', items: [`${best.title}: ${why || summaryLine(best)}`] });
+      }
+      r.extra = { vitals: vit, indicators };
+      break;
+    }
+    case 'briefing': {
+      const sentinel = state.context.mode === 'sentinel';
+      const upcoming = c.texts('upcoming', parsed.upcoming, 5);
+      const watch = c.texts('watch_out', parsed.watch_out, 3);
+      const fix = c.sim('fix_sim', parsed.fix_sim, sentinel);
+      const fixWhy = c.text('fix_why', parsed.fix_why, false, 300);
+      if (sentinel && fix && fix.diff.crunchAfter >= fix.diff.crunchBefore) c.errors.push('fix_sim must lower overdraft risk; simulate a different fix');
+      if (upcoming.length) r.sections.push({ heading: 'Coming up', items: upcoming });
+      if (watch.length) r.sections.push({ heading: 'Watch out', items: watch });
+      if (fix) {
+        r.scenarios = [draft(fix)];
+        r.highlights = highlightsFromDiff(fix.diff);
+        r.sections.push({ heading: sentinel ? 'Suggested fix' : 'Worth doing', items: [`${fix.title}: ${fixWhy || summaryLine(fix)}`] });
+      } else {
+        r.highlights = briefingHighlights(state);
+      }
+      r.extra = { mode: sentinel ? 'sentinel' : 'weekly', fixReachesTarget: fix ? fix.diff.crunchAfter < 10 : null };
+      break;
+    }
+    case 'coach':
+      c.errors.push('internal: coach must be routed before running');
+      break;
     case 'opportunity': {
       const opps = getOpportunities(state);
       const picks = (Array.isArray(parsed.picks) ? parsed.picks : []).slice(0, 3).map((p: any, i: number) => {
@@ -302,7 +346,7 @@ function publicOpp(o: ReturnType<typeof getOpportunities>[number]) {
 }
 
 function defaultTitle(f: FeatureKind): string {
-  return { twin: 'Your question', ripple: 'Ripple effect', negotiation: 'A middle path', stress: 'Stress test', life_event: 'Life event plan', memory: 'From your decision log', opportunity: 'Opportunities' }[f];
+  return { twin: 'Your question', ripple: 'Ripple effect', negotiation: 'A middle path', stress: 'Stress test', life_event: 'Life event plan', memory: 'From your decision log', opportunity: 'Opportunities', health: 'Your financial health', briefing: 'Household briefing', coach: 'Coach' }[f];
 }
 
 function summaryLine(s: Sim): string {
@@ -455,6 +499,40 @@ export function fallback(state: AgentState, reason: string): InsightResult {
       r.extra = { cited: hits, reason };
       return r;
     }
+    case 'health': {
+      const vit = state.baseline.vitals.filter(v => v.key !== 'score');
+      const worst = [...vit].sort((a, b) => bandRank(b.band) - bandRank(a.band))[0];
+      const score = state.baseline.vitals.find(v => v.key === 'score')!;
+      const r = base(state, 'Your financial health', `The household score is ${score.display}. The weakest indicator is ${VITAL_LABEL[worst.key].toLowerCase()} at ${worst.display}.`, 'fallback');
+      r.highlights = state.baseline.vitals.map(v => ({ label: VITAL_LABEL[v.key], value: v.display, direction: v.band === 'green' ? 'better' : v.band === 'red' ? 'worse' : 'neutral' }));
+      r.sections.push({ heading: 'Your vitals', items: vit.map(v => `${VITAL_LABEL[v.key]}: ${v.display} (${v.band}). ${VITAL_MEANING[v.key]}`) });
+      r.extra = { vitals: state.baseline.vitals, reason };
+      return r;
+    }
+    case 'briefing': {
+      const sentinel = state.context.mode === 'sentinel';
+      const f = state.baseline;
+      const r = base(state, sentinel ? 'Crunch ahead' : 'Household briefing', '', 'fallback');
+      const upcoming = upcomingBills(state, 5);
+      r.answer = sentinel
+        ? `Overdraft risk peaks at ${Math.round(f.peakCrunchRisk * 100)}% on ${dayToLabel(f.peakCrunchDay)}.`
+        : `Over the next 60 days household cash stays at or above ${$(f.minBalance)}, with overdraft risk at ${Math.round(f.peakCrunchRisk * 100)}%.`;
+      r.sections.push({ heading: 'Coming up', items: upcoming });
+      if (sentinel) {
+        // Free fixes first: move bills after payday, trim flexible spending for a month, or both.
+        const sim = bestSentinelFix(state);
+        if (sim) {
+          r.scenarios = [draft(sim)];
+          r.highlights = highlightsFromDiff(sim.diff);
+          const note = sim.diff.crunchAfter < 10 ? '' : ' This is the best free fix found; it does not get risk under 10%, so a transfer from outside the household may be needed.';
+          r.sections.push({ heading: 'Suggested fix', items: [`${sim.title}: overdraft risk ${sim.diff.crunchBefore}% to ${sim.diff.crunchAfter}%.${note}`] });
+        }
+      } else r.highlights = briefingHighlights(state);
+      r.extra = { mode: sentinel ? 'sentinel' : 'weekly', reason };
+      return r;
+    }
+    case 'coach':
+      return base(state, 'Coach', 'I could not work out what to look at. Try asking about a purchase, an emergency, or your vitals.', 'fallback');
     case 'opportunity': {
       const opps = getOpportunities(state).slice(0, 3);
       const r = base(state, 'Opportunities', opps.length ? `Found ${opps.length} things worth a look.` : 'Nothing stands out right now.', 'fallback');
@@ -491,6 +569,60 @@ export function fallback(state: AgentState, reason: string): InsightResult {
       return r;
     }
   }
+}
+
+const VITAL_MEANING: Record<string, string> = {
+  runway: 'How many months of essential bills current cash would cover.',
+  crunch_risk: 'The highest chance in the next 30 days that checking dips below its safety buffer.',
+  dti: 'The share of monthly income that goes to debt payments.',
+  utilization: 'How much of the available credit card limits is in use.',
+  savings_rate: 'The share of income left after bills and spending.',
+  goal_track: 'How far behind the slowest shared goal is running.',
+};
+
+function bandRank(b: string): number {
+  return b === 'red' ? 2 : b === 'yellow' ? 1 : 0;
+}
+
+function upcomingBills(state: AgentState, n: number): string[] {
+  const t = state.snap.twin;
+  return t.obligations
+    .filter(o => o.visible && o.kind !== 'income' && o.kind !== 'transfer')
+    .map(o => ({ o, d: nextOccurrence(o.cadence, o.anchorDay, t.today + 1) }))
+    .filter(x => x.d > 0 && x.d <= t.today + 30)
+    .sort((a, b) => a.d - b.d)
+    .slice(0, n)
+    .map(x => `${dayToLabel(x.d)}: ${x.o.label} ${$(x.o.amount)}`);
+}
+
+function briefingHighlights(state: AgentState): Highlight[] {
+  const b = state.baseline;
+  return [
+    { label: 'Lowest cash (60 days)', value: $(b.minBalance), direction: 'neutral' },
+    { label: 'Overdraft risk', value: `${Math.round(b.peakCrunchRisk * 100)}%`, direction: b.peakCrunchRisk > 0.25 ? 'worse' : 'neutral' },
+    { label: 'Monthly surplus', value: $(b.monthlySurplus), direction: b.monthlySurplus > 0 ? 'better' : 'worse' },
+  ];
+}
+
+/** Tries free fixes and keeps the one that lowers peak overdraft risk most. */
+function bestSentinelFix(state: AgentState): Sim | undefined {
+  const t = state.snap.twin;
+  const start = dayToIso(t.today + 1);
+  const end = dayToIso(t.today + 31);
+  const moves = getOpportunities(state).filter(o => o.type === 'bill_timing' && o.lever).map(o => o.lever!);
+  const trims = t.spending
+    .filter(c => ['dining', 'shopping', 'entertainment'].includes(c.category) && c.dailyMean > 1)
+    .map(c => ({ kind: 'recurring_change' as const, category: c.category, monthly_delta: -Math.round(c.dailyMean * 30.4375 * 0.5), start_date: start, end_date: end, label: `Halve ${c.category} for a month` }));
+  const candidates: [string, typeof moves][] = [];
+  if (moves.length) candidates.push(['Move bills after payday', moves]);
+  if (trims.length) candidates.push(['Trim flexible spending for a month', trims]);
+  if (moves.length && trims.length) candidates.push(['Move bills and trim spending', [...moves, ...trims]]);
+  let best: Sim | undefined;
+  for (const [title, levers] of candidates) {
+    const sim = runSim(state, title, levers).sim;
+    if (sim && sim.diff.crunchAfter < sim.diff.crunchBefore && (!best || sim.diff.crunchAfter < best.diff.crunchAfter)) best = sim;
+  }
+  return best;
 }
 
 function halfAndStagger(l: any, i: number): any {

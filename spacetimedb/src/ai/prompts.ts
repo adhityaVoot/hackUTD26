@@ -34,7 +34,8 @@ Verdict meanings: "yes" (no vital gets worse by a band, no buffer breach), "yes_
     schema: `{"title": string (max 60 chars), "verdict": "yes"|"yes_with_tradeoffs"|"not_yet"|"no", "answer": string (2-4 sentences, direct answer first, numbers from tools only), "tradeoffs": string[] (1-4 short bullets), "recommended_sim": "sim_N" (the fork that matches the question), "alternative_sims": ["sim_N", ...] (optional, better paths)}`,
   },
   ripple: {
-    task: `Feature: Ripple Effect. Member A describes one decision. Show its chain of consequences in order: what happens first, what that causes next, and so on (cash on the day, then the next bills, the buffer and overdraft risk, then goals and long-run vitals).
+    task: `Feature: Ripple Effect. Member A describes one decision. Show its chain of consequences in order: what happens first, what that causes next, and so on (cash on the day, then the next bills, the cushion and overdraft risk, then goals and long-run vitals).
+How to read the numbers: cash_on_decision_date_before/after is household cash on the day of the decision. The buffer is a fixed safety line the household never wants to cross; it is NOT money that gets spent, so never say the buffer is "drawn down" or "used". cushion_above_buffer = lowest cash minus the buffer. If lowest_point_moved is false, the decision falls after the 60-day low point: say plainly that the lowest point is unchanged and why, and don't describe a change that didn't happen. Only report effects that a field shows changed.
 Simulate the decision exactly as described. Optionally simulate one gentler variant (different timing or amount) that softens the worst link in the chain.`,
     schema: `{"title": string, "answer": string (1-2 sentence summary, e.g. "Buying this laptop delays the vacation goal by 18 days and lowers your emergency cushion."), "decision_sim": "sim_N", "chain": [{"step": string (one consequence, cause -> effect, with tool numbers), "area": "cash"|"bills"|"buffer"|"risk"|"goal"|"vital", "severity": "low"|"medium"|"high"}] (2-6 items, in time order), "alternative_sim": "sim_N" (optional), "alternative_note": string (optional, one sentence)}`,
   },
@@ -57,8 +58,21 @@ Steps: simulate the scenario as described, plus a milder version (shorter or par
     task: `Feature: Financial Memory. Member A is asking about a past household decision. Use search_memory (try a second query with different words if the first finds nothing). Answer only from what was recorded: the decision, when, and the reasons given at the time. If nothing was recorded, say so plainly; do not guess. Mention any commitment that came out of the decision.`,
     schema: `{"title": string, "answer": string (2-4 sentences citing the recorded reasons), "cited": ["mem_N", ...], "commitments": string[] (may be empty), "still_relevant": string (one sentence: does the reason still hold today, based on current vitals; "" if unknown)}`,
   },
+  health: {
+    task: `Feature: Health Check. Explain the household's six health indicators (runway, crunch risk, debt-to-income, card utilization, savings rate, goal track) plus the 0-100 score, in plain English: what each number means for this household and why it's in its band. Then find the single move that would most improve the weakest indicator: simulate one or two candidate moves and recommend the one that helps most without making another indicator worse by a band. Call check_bank if balances matter to your advice.`,
+    schema: `{"title": string, "answer": string (2-3 sentences: overall health and the one move), "indicators": [{"vital": "runway"|"crunch_risk"|"dti"|"utilization"|"savings_rate"|"goal_track", "meaning": string (one sentence, plain English)}] (all six), "best_move_sim": "sim_N", "best_move_why": string}`,
+  },
+  briefing: {
+    task: `Feature: Household Briefing. Nobody asked a question: this runs on a schedule, like a weekly money check-in. Using the forecast, summarize the next 60 days for the household: the cash outlook, the bills coming up, goals on or off track, and anything to act on. Call check_bank to confirm balances and catch bills missing from the forecast.
+If context.mode is "sentinel", overdraft risk has crossed 25%: you MUST simulate a fix that brings peak overdraft risk under 10% (free fixes first: move a flexible bill after payday, transfer from savings, trim a category) and cite it as fix_sim. If nothing gets it under 10%, cite the best one and say so.`,
+    schema: `{"title": string, "answer": string (2-4 sentences: the outlook and the one thing to do), "upcoming": string[] (2-5 dated bills or events), "watch_out": string[] (0-3 risks), "fix_sim": "sim_N" (required in sentinel mode, else optional), "fix_why": string (optional)}`,
+  },
+  coach: {
+    task: 'Routing only.',
+    schema: '{}',
+  },
   opportunity: {
-    task: `Feature: Opportunity Radar. Call find_opportunities, then choose up to three that matter most for this household right now and explain each in one or two sentences. If a crunch is forecast (in_crunch true), free fixes come first. For an opportunity with has_fix true you may simulate its fix to show the effect. Individual items belong to their owner; never mention another member's individual items.`,
+    task: `Feature: Opportunity Radar. Call find_opportunities, then choose up to three. saves_per_month is a monthly, recurring saving (say "a month"); for a subscription increase, distinguish the increase (increase_per_month) from cancelling entirely (cancelling_entirely_saves_per_month). Choose up to three that matter most for this household right now and explain each in one or two sentences. If a crunch is forecast (in_crunch true), free fixes come first. For an opportunity with has_fix true you may simulate its fix to show the effect. Individual items belong to their owner; never mention another member's individual items.`,
     schema: `{"title": string, "answer": string (1-2 sentences), "picks": [{"opportunity": "opp_N", "why": string, "sim_id": "sim_N" (optional)}]}`,
   },
 };
@@ -72,5 +86,18 @@ export function systemPrompt(feature: FeatureKind, today: string): string {
 export function jsonToolProtocol(toolNames: string[], toolDocs: string): string {
   return `\n\nTool protocol: to call a tool, reply with ONLY {"tool": "<name>", "args": {...}}. You will get the result in the next message. Available tools: ${toolNames.join(', ')}.\n${toolDocs}\nWhen finished, reply with ONLY {"final": <answer JSON>}.`;
 }
+
+/** The coach's first step: pick the workflow for a free-form message. */
+export const ROUTER_PROMPT = `You route messages for a household money coach. Pick the ONE workflow that best answers the latest message, using the conversation so far for context (follow-ups like "what if we waited until July?" refer to the previous topic).
+Workflows:
+- twin: can we afford X / should we do X (a decision with a yes/no answer)
+- ripple: what happens if we do X / knock-on effects of one decision
+- stress: an emergency or bad scenario (job loss, medical bill, car repair, rent hike)
+- life_event: a life change to prepare for (wedding, baby, home purchase, move, college)
+- memory: why did we decide X / what did we agree about X (the past)
+- opportunity: where can we save / what should we look at
+- health: how are we doing / explain our score or vitals
+- briefing: what's coming up / outlook for the next weeks / bills due
+Reply with ONLY {"workflow": "<one of the names>", "request": "<the message rewritten as a standalone request, including details from earlier turns>"}.`;
 
 export const DISCLAIMER = 'Projections from your household data. Not financial advice. Nothing moves until co-signed.';

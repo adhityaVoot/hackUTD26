@@ -207,3 +207,39 @@ describe('Nemotron module end to end', () => {
     expect(() => (mod.stressTest as any)(reducerCtx(PRIYA), { scenario: 'One more' })).toThrow(/still working/);
   });
 });
+
+describe('Sentinel watch and coach threads (module)', () => {
+  it('the watch posts a weekly briefing on its own, then waits for the next simulated week', () => {
+    (mod.startNemotronWatch as any)({ ...reducerCtx(PRIYA), env: { ADMIN_CODE: 'x' } }, { adminCode: 'x', everySeconds: 60 });
+    expect(store.rows('nemotronWatch')).toHaveLength(1);
+    const tick = () => (mod.nemotronWatchTick as any)(reducerCtx(PRIYA), { arg: store.rows('nemotronWatch')[0] });
+    tick();
+    const ins = store.rows('aiInsight');
+    expect(ins).toHaveLength(1);
+    expect(ins[0]).toMatchObject({ kind: 'briefing', requesterPersonId: 0n, audiencePersonId: 0n });
+    runJobs(scripted([() => ({ status: 500, body: {} })]));
+    tick(); // same sim day: nothing new
+    expect(store.rows('aiInsight')).toHaveLength(1);
+    const h = store.rows('household')[0];
+    store.db.household.id.update({ ...h, simDay: h.simDay + 7 });
+    tick();
+    expect(store.rows('aiInsight')).toHaveLength(2);
+  });
+
+  it('coach: routes, keeps the thread, and only the owner can continue it', () => {
+    (mod.askCoach as any)(reducerCtx(PRIYA), { message: 'How are we doing?', threadInsightId: 0n });
+    const first = store.rows('aiInsight')[0];
+    expect(JSON.parse(first.contextJson).threadId).toBe(String(first.id));
+    runJobs(scripted([() => ({ status: 500, body: {} })]));
+    expect(JSON.parse(store.rows('aiInsight')[0].resultJson).kind).toBe('health');
+    expect(() => (mod.askCoach as any)(reducerCtx(SAM), { message: 'And next month?', threadInsightId: first.id })).toThrow(/not found/);
+    (mod.askCoach as any)(reducerCtx(PRIYA), { message: 'What is coming up next month?', threadInsightId: first.id });
+    const http = scripted([() => ({ status: 500, body: {} })]);
+    runJobs(http);
+    const second = store.rows('aiInsight')[1];
+    expect(JSON.parse(second.contextJson).threadId).toBe(String(first.id));
+    // The router saw the earlier turn.
+    expect(JSON.stringify(http.calls[0])).toContain('How are we doing?');
+    expect(JSON.parse(second.resultJson).extra.routedTo).toBe('briefing');
+  });
+});

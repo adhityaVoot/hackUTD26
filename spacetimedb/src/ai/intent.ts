@@ -245,3 +245,17 @@ export function lifeEventAssumptions(text: string, data: TwinData): { event: str
     assumptions: [mk('Upfront cost', { kind: 'one_time', amount: money ?? 2000, date: at, label: shortLabel(text) }, 'A placeholder until you add details.', 'low')],
   };
 }
+
+// ---------- Coach routing (rule-based backup for the Nemotron router) ----------
+
+export function classifyMessage(text: string): 'twin' | 'ripple' | 'stress' | 'life_event' | 'memory' | 'opportunity' | 'health' | 'briefing' {
+  const q = text.toLowerCase();
+  if (/\bwhy did we|did we (decide|agree)|last (year|month|time)|remember when|what did we (decide|agree)/.test(q)) return 'memory';
+  if (/\blos(e|es|ing|t) (his|her|my|their|our|a|the) job|laid off|layoff|job loss|fired|unemploy|medical|hospital|emergency|car (broke|repair)|rent (goes|went) up|what if .*(lose|lost)/.test(q)) return 'stress';
+  if (/marr|wedding|baby|pregnan|buy(ing)? a (house|home)|down ?payment|retire|college|moving to|relocat/.test(q)) return 'life_event';
+  if (/save money|where can we save|cut costs|opportunit|subscriptions?|wasting|cheaper/.test(q)) return 'opportunity';
+  if (/how are we doing|our (score|health|vitals)|explain .*(score|vitals|runway|utilization)|financial health/.test(q)) return 'health';
+  if (/coming up|next (few )?weeks|outlook|bills due|upcoming|this month look/.test(q)) return 'briefing';
+  if (/what happens if|knock-on|ripple|consequences|effect of/.test(q)) return 'ripple';
+  return 'twin';
+}

@@ -40,7 +40,7 @@ import {
   vital,
 } from './tables';
 import { registerNemotron } from './ai/module';
-import { aiInsight, decisionMemory, negotiation, negotiationPosition } from './ai/tables';
+import { aiInsight, decisionMemory, negotiation, negotiationPosition, nemotronWatch, nemotronWatchState } from './ai/tables';
 
 const spacetimedb = schema(
   {
@@ -78,6 +78,8 @@ const spacetimedb = schema(
     decisionMemory,
     negotiation,
     negotiationPosition,
+    nemotronWatch,
+    nemotronWatchState,
   },
   {
     env: {
@@ -151,9 +153,16 @@ export const myMember = spacetimedb.view(
   },
 );
 
-// Nemotron features: Digital Twin, Ripple Effect, Negotiation Room, Stress Test,
-// Life Event Simulator, Financial Memory, Opportunity Radar. See src/ai/module.ts.
+// Nemotron features: Coach (routes to the rest), Digital Twin, Ripple Effect, Negotiation Room,
+// Stress Test, Life Event Simulator, Financial Memory, Opportunity Radar, Health Check, and the
+// Sentinel briefing that runs on its own schedule. See src/ai/module.ts.
 export const {
+  askCoach,
+  requestHealthCheck,
+  requestBriefing,
+  startNemotronWatch,
+  stopNemotronWatch,
+  nemotronWatchTick,
   askTwin,
   simulateRipple,
   stressTest,

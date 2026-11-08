@@ -31,6 +31,7 @@ export interface AccountRow {
   aprBps: number;
   bufferCents: bigint;
   maturityDay: number;
+  nessieId?: string;
 }
 export interface GrantRow {
   accountId: bigint;

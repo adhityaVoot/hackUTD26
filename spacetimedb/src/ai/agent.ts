@@ -11,10 +11,11 @@
 import { fallback, finalize } from './features';
 import { sanitizeUserText, scanOutbound } from './gateway';
 import { chat, extractJson, type ChatMessage, type HttpLike, type ModelConfig, type ToolSpec } from './model';
-import { jsonToolProtocol, systemPrompt } from './prompts';
+import { jsonToolProtocol, ROUTER_PROMPT, systemPrompt } from './prompts';
+import { classifyMessage } from './intent';
 import { dayToLabel } from './dates';
 import { executeTool, toolsFor, type AgentState } from './tools';
-import type { AgentStep, InsightResult } from './types';
+import { ROUTABLE, type AgentStep, type FeatureKind, type InsightResult } from './types';
 
 export interface AgentDeps {
   http: HttpLike;
@@ -213,4 +214,47 @@ function safeTitle(args: string): string {
 function summarizeSim(out: any): string {
   if (!out || out.error) return 'error';
   return `${out.sim_id}: lowest cash ${out.lowest_cash_before} -> ${out.lowest_cash_after}, overdraft risk ${out.overdraft_risk_pct_before}% -> ${out.overdraft_risk_pct_after}%`;
+}
+
+export interface CoachTurn {
+  question: string;
+  answer: string;
+}
+
+export interface Route {
+  feature: FeatureKind;
+  request: string;
+  steps: AgentStep[];
+  promptTokens: number;
+  completionTokens: number;
+}
+
+/**
+ * The conversational coach's first step: Nemotron reads the message and the last few turns and
+ * picks which workflow to run, rewriting follow-ups ("what about July?") as standalone requests.
+ */
+export function routeCoach(message: string, history: CoachTurn[], names: Map<string, string>, deps: AgentDeps): Route {
+  const steps: AgentStep[] = [];
+  const clean = (s: string) => sanitizeUserText(s, names, 600);
+  const rules = (why: string): Route => {
+    const feature = classifyMessage(message);
+    steps.push({ step: 'route', detail: `rule-based routing to ${feature} (${why})`, flagged: false });
+    return { feature, request: clean(message), steps, promptTokens: 0, completionTokens: 0 };
+  };
+  if (!deps.primary) return rules('AI is off');
+  const convo = history.slice(-3).map(h => ({ asked: clean(h.question), answered: clean(h.answer).slice(0, 400) }));
+  const user = JSON.stringify({ conversation_so_far: convo, latest_message: clean(message) });
+  const scan = scanOutbound(user, [...names.keys()]);
+  if (!scan.ok) {
+    steps.push({ step: 'pii_scan', detail: `router payload blocked: ${scan.reason}`, flagged: true });
+    return rules('privacy scan');
+  }
+  const res = chat(deps.http, deps.primary, [{ role: 'system', content: ROUTER_PROMPT }, { role: 'user', content: user }], { maxTokens: 300, temperature: 0, timeout: deps.timeout });
+  if (!res.ok) return rules(`model unavailable: ${res.error.slice(0, 60)}`);
+  const parsed = extractJson(res.message?.content ?? '') as { workflow?: string; request?: string } | null;
+  const feature = parsed?.workflow as FeatureKind;
+  if (!parsed || !ROUTABLE.includes(feature)) return rules('router reply was not a known workflow');
+  const request = typeof parsed.request === 'string' && parsed.request.trim() ? clean(parsed.request) : clean(message);
+  steps.push({ step: 'route', detail: `Nemotron routed the message to ${feature}: "${request.slice(0, 160)}"`, flagged: false });
+  return { feature, request, steps, promptTokens: res.promptTokens, completionTokens: res.completionTokens };
 }

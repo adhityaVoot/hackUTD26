@@ -18,6 +18,15 @@ export interface Sim {
   result: TwinResult;
   diff: TwinDiff;
   survivalDays: number;
+  firstDay: number; // earliest lever day
+  cashOnFirstDayBefore: number | null; // expected household cash that day, null if beyond 60 days
+  cashOnFirstDayAfter: number | null;
+}
+
+/** Live bank lookups (Capital One Nessie). Injected by the module; null when not configured. */
+export interface BankLookup {
+  account(token: string): { balance: number } | { error: string };
+  bills(token: string): { amount: number; date: string; status: string }[] | { error: string };
 }
 
 export interface AgentState {
@@ -33,6 +42,7 @@ export interface AgentState {
   question: string;
   context: Record<string, unknown>; // feature extras (negotiation positions, ...)
   lastSavings: Record<string, unknown> | null; // last required_monthly_savings result, for {savings.*} slots
+  bank: BankLookup | null;
 }
 
 export function newState(
@@ -59,6 +69,7 @@ export function newState(
     question,
     context,
     lastSavings: null,
+    bank: null,
   };
 }
 
@@ -158,6 +169,15 @@ const ALL_TOOLS: Record<string, ToolSpec> = {
       parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
     },
   },
+  check_bank: {
+    type: 'function',
+    function: {
+      name: 'check_bank',
+      description:
+        "Calls the household's bank (Capital One Nessie API) live: compares each visible account's bank balance with the ledger, and lists upcoming bills the bank has that the forecast doesn't. Use it before giving advice that depends on balances being current.",
+      parameters: { type: 'object', properties: {} },
+    },
+  },
   find_opportunities: {
     type: 'function',
     function: {
@@ -170,13 +190,16 @@ const ALL_TOOLS: Record<string, ToolSpec> = {
 };
 
 const FEATURE_TOOLS: Record<FeatureKind, string[]> = {
-  twin: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'simulate_scenario', 'required_monthly_savings'],
+  twin: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'simulate_scenario', 'required_monthly_savings', 'check_bank'],
   ripple: ['get_household_overview', 'get_forecast_summary', 'simulate_scenario'],
   negotiation: ['get_household_overview', 'get_vitals', 'simulate_scenario', 'search_memory'],
   stress: ['get_household_overview', 'get_forecast_summary', 'simulate_scenario'],
   life_event: ['get_household_overview', 'get_forecast_summary', 'simulate_scenario', 'required_monthly_savings'],
   memory: ['search_memory', 'get_vitals'],
   opportunity: ['find_opportunities', 'get_forecast_summary', 'simulate_scenario'],
+  health: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'simulate_scenario', 'check_bank'],
+  briefing: ['get_household_overview', 'get_forecast_summary', 'get_vitals', 'simulate_scenario', 'find_opportunities', 'check_bank'],
+  coach: [],
 };
 
 export function toolsFor(feature: FeatureKind): ToolSpec[] {
@@ -238,6 +261,12 @@ export function diffView(s: Sim) {
     monthly_surplus_before: d.monthlySurplusBefore,
     monthly_surplus_after: d.monthlySurplusAfter,
     cash_runs_out_in_days: s.survivalDays < 0 ? 'not within 2 years' : s.survivalDays,
+    decision_date: dayToLabel(s.firstDay),
+    cash_on_decision_date_before: s.cashOnFirstDayBefore ?? 'beyond 60 days',
+    cash_on_decision_date_after: s.cashOnFirstDayAfter ?? 'beyond 60 days',
+    cushion_above_buffer_before: Math.round(d.minBalanceBefore - s.result.buffer),
+    cushion_above_buffer_after: Math.round(d.minBalanceAfter - s.result.buffer),
+    lowest_point_moved: Math.round(d.minBalanceBefore) !== Math.round(d.minBalanceAfter),
     one_time_costs_total: Math.round(s.levers.filter(l => l.kind === 'one_time' && !l.flowIn).reduce((t, l) => t + l.amount, 0)),
   };
 }
@@ -276,6 +305,8 @@ export function runSim(state: AgentState, title: string, levers: Lever[]): { sim
   if (errors.length || resolved.length === 0) return { errors: errors.length ? errors : ['no levers'] };
   const result = simulate(state.snap.twin, resolved);
   const simId = `sim_${state.sims.size + 1}`;
+  const firstDay = Math.min(...resolved.map(l => l.day));
+  const at = (pts: TwinResult['points']) => pts.find(p => p.day === firstDay)?.p50 ?? null;
   const sim: Sim = {
     simId,
     title: title.replace(/[^A-Za-z0-9 $,.'&()/-]/g, '').slice(0, 60) || simId,
@@ -283,6 +314,9 @@ export function runSim(state: AgentState, title: string, levers: Lever[]): { sim
     result,
     diff: diff(state.baseline, result),
     survivalDays: survivalDays(state.snap.twin, resolved),
+    firstDay,
+    cashOnFirstDayBefore: at(state.baseline.points),
+    cashOnFirstDayAfter: at(result.points),
   };
   state.sims.set(simId, sim);
   return { sim, errors: [] };
@@ -291,6 +325,31 @@ export function runSim(state: AgentState, title: string, levers: Lever[]): { sim
 export function getOpportunities(state: AgentState): Opportunity[] {
   if (!state.opportunities) state.opportunities = findOpportunities(state.snap, state.baseline);
   return state.opportunities;
+}
+
+/** Live cross-check against the bank. Only tokens and amounts come back; payee text is dropped. */
+export function checkBank(state: AgentState) {
+  if (!state.bank) return { available: false, note: 'Bank sync is not configured; the forecast uses the last synced ledger.' };
+  const t = state.snap.twin;
+  const accounts = [];
+  const unmatchedBills = [];
+  for (const a of t.accounts.filter(x => x.visibility !== 'signal' && ['checking', 'savings', 'credit_card'].includes(x.kind))) {
+    const live = state.bank.account(a.token);
+    if ('error' in live) {
+      accounts.push({ account: a.token, kind: a.kind, status: live.error });
+      continue;
+    }
+    const drift = Math.round(live.balance - a.balance);
+    accounts.push({ account: a.token, kind: a.kind, ledger_balance: Math.round(a.balance), bank_balance: Math.round(live.balance), difference: drift, in_sync: Math.abs(drift) < 1 });
+    const bills = state.bank.bills(a.token);
+    if ('error' in bills) continue;
+    for (const b of bills) {
+      if (b.status === 'completed' || b.status === 'cancelled') continue;
+      const known = t.obligations.some(o => o.accountToken === a.token && Math.abs(o.amount - b.amount) < 1);
+      if (!known) unmatchedBills.push({ account: a.token, amount: Math.round(b.amount), date: b.date, status: b.status });
+    }
+  }
+  return { available: true, source: 'Capital One Nessie', accounts, bills_not_in_forecast: unmatchedBills.slice(0, 10) };
 }
 
 /** Models sometimes send levers as a JSON string, a single object, or under a misspelled key. */
@@ -365,9 +424,12 @@ export function executeTool(state: AgentState, name: string, rawArgs: string | R
       const opps = getOpportunities(state).slice(0, 8);
       return remember(state, {
         in_crunch: state.baseline.peakCrunchRisk > 0.25,
-        opportunities: opps.map(o => ({ opportunity: o.opportunity, type: o.type, scope: o.scope, owner: o.owner, title: o.title, evidence: o.evidence, est_monthly_savings: o.est_monthly_savings, effort: o.effort, free: o.free, has_fix: !!o.lever })),
+        note: 'saves_per_month values are monthly, recurring savings.',
+        opportunities: opps.map(o => ({ opportunity: o.opportunity, type: o.type, scope: o.scope, owner: o.owner, title: o.title, evidence: o.evidence, saves_per_month: o.est_monthly_savings, effort: o.effort, free: o.free, has_fix: !!o.lever })),
       });
     }
+    case 'check_bank':
+      return remember(state, checkBank(state));
     default:
       return { error: `unknown tool ${name}` };
   }
