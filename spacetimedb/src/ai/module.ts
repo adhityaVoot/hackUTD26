@@ -1,3 +1,5 @@
+import {isMinor} from '../accountPrivacy';
+import {simDayToIso} from '../engine/calendar';
 // SpacetimeDB wiring for the Nemotron features.
 //
 // Flow: a reducer authorizes the caller, rate-limits, and inserts ai_run + ai_insight
@@ -223,19 +225,23 @@ function loadJob(tx: Ctx, runId: bigint): Loaded | null {
 }
 
 function snapshotInputFor(tx: Ctx, hid: bigint, requester: bigint, today: number): SnapshotInput {
+  const viewer=tx.db.person.id.find(requester);
+  const ownerView=viewer?.role==='coowner';
+  const visibleAccounts=[...tx.db.account.householdId.filter(hid)].filter(a=>!ownerView||a.isJoint||a.ownerPersonId===requester||isMinor(tx.db.ageProfile.personId.find(a.ownerPersonId)?.birthDate,simDayToIso(today))||!tx.db.accountPrivacy.accountId.find(a.id)?.ownerAccessDisabled);
+  const inherited=ownerView?visibleAccounts.filter(a=>!a.isJoint&&a.ownerPersonId!==requester).map(a=>({accountId:a.id,granteePersonId:requester,level:'full',status:'active',expiresAtMicros:tx.timestamp.microsSinceUnixEpoch+60_000_000n})):[];
   return {
     today,
     nowMicros: tx.timestamp.microsSinceUnixEpoch,
     requesterPersonId: requester,
     persons: [...tx.db.person.householdId.filter(hid)].map(p => ({ id: p.id, displayName: p.displayName, role: p.role })),
-    accounts: [...tx.db.account.householdId.filter(hid)],
-    grants: [...tx.db.grant.householdId.filter(hid)].map(g => ({
+    accounts: visibleAccounts,
+    grants: [...inherited,...[...tx.db.grant.householdId.filter(hid)].map(g => ({
       accountId: g.accountId,
       granteePersonId: g.granteePersonId,
       level: g.level,
       status: g.status,
       expiresAtMicros: g.expiresAt.microsSinceUnixEpoch,
-    })),
+    }))],
     obligations: [...tx.db.obligation.householdId.filter(hid)],
     txns: [...tx.db.txn.householdId.filter(hid)].filter(x => x.day > today - 180 && x.day <= today),
     spendProfiles: [...tx.db.spendProfile.householdId.filter(hid)],
@@ -311,6 +317,15 @@ function humanizer(snap: Snapshot, labels: Loaded['labels']) {
 
 function leverParams(l: ResolvedLever, snap: Snapshot): string {
   const id = (m: Map<string, bigint>, tok: string) => (m.has(tok) ? String(m.get(tok)) : '');
+  // The Monte Carlo engine consumes signed cents in `amount` and numeric account IDs.
+  // Preserve legacy AI metadata while supplying the actual engine contract.
+  const funding = l.from || snap.twin.accounts.find(a => a.visibility === 'full' && ['checking','savings'].includes(a.kind) && a.owner === 'joint')?.token
+    || snap.twin.accounts.find(a => a.visibility === 'full' && ['checking','savings'].includes(a.kind))?.token || '';
+  const engineParams = l.kind === 'one_time'
+    ? { amount: Math.round(l.amount * 100) * (l.flowIn ? 1 : -1), accountId: Number(id(snap.map.accounts, funding)), fundingAssumption: l.from ? '' : 'Uses the first available shared cash account, otherwise your first full-access cash account.' }
+    : l.kind === 'transfer' ? { amount: Math.round(l.amount * 100), fromAccountId: Number(id(snap.map.accounts,l.from)), toAccountId: Number(id(snap.map.accounts,l.to)) }
+    : l.kind === 'extra_payment' ? { amount: Math.round(l.amount * 100), fromAccountId: Number(id(snap.map.accounts,funding)), loanAccountId: Number(id(snap.map.accounts,l.to)) }
+    : l.kind === 'move_obligation' ? { obligationId: Number(id(snap.map.obligations,l.from)), newDay: l.day } : {};
   return JSON.stringify({
     amountCents: Math.round(l.amount * 100),
     day: l.day,
@@ -322,6 +337,7 @@ function leverParams(l: ResolvedLever, snap: Snapshot): string {
     toAccountId: id(snap.map.accounts, l.to),
     obligationId: id(snap.map.obligations, l.from),
     personId: id(snap.map.members, l.from),
+    ...engineParams,
   });
 }
 

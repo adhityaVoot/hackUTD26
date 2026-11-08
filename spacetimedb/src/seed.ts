@@ -24,6 +24,9 @@ function must(map: Map<number, bigint>, id: number, label: string): bigint {
 }
 
 function wipeHousehold(ctx: Ctx, householdId: bigint): void {
+  for(const row of list(ctx.db.ageProfile.householdId.filter(householdId)))ctx.db.ageProfile.personId.delete(row.personId);
+  for(const row of list(ctx.db.accountPrivacy.householdId.filter(householdId)))ctx.db.accountPrivacy.accountId.delete(row.accountId);
+  for(const row of list(ctx.db.moneyRequest.householdId.filter(householdId)))ctx.db.moneyRequest.id.delete(row.id);
   const grantIds = new Set<bigint>();
   for (const row of ctx.db.grant.householdId.filter(householdId)) grantIds.add(row.id);
   for (const row of list(ctx.db.grantExpiry.iter())) {
@@ -144,6 +147,8 @@ export function seedDemo(ctx: Ctx, inviteCode: string): void {
       personaKey: person.personaKey,
       pinHash: '',
     });
+    // Hackathon fixture: all demo members are under 18, as requested.
+    ctx.db.ageProfile.insert({personId:row.id,householdId:household.id,birthDate:'2009-01-01'});
     personIds.set(person.id, row.id);
   }
 

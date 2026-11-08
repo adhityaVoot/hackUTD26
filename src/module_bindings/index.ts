@@ -41,12 +41,14 @@ import AddObligationReducer from "./add_obligation_reducer";
 import AddPersonReducer from "./add_person_reducer";
 import AddTransactionReducer from "./add_transaction_reducer";
 import AdminSeedDemoReducer from "./admin_seed_demo_reducer";
+import AdminSetDemoBirthDatesReducer from "./admin_set_demo_birth_dates_reducer";
 import AskCoachReducer from "./ask_coach_reducer";
 import AskMemoryReducer from "./ask_memory_reducer";
 import AskTwinReducer from "./ask_twin_reducer";
 import CloseNegotiationReducer from "./close_negotiation_reducer";
 import CreateGrantReducer from "./create_grant_reducer";
 import CreateHouseholdReducer from "./create_household_reducer";
+import CreateMoneyRequestReducer from "./create_money_request_reducer";
 import ForkReducer from "./fork_reducer";
 import JoinHouseholdReducer from "./join_household_reducer";
 import OpenNegotiationReducer from "./open_negotiation_reducer";
@@ -60,10 +62,13 @@ import RenewGrantReducer from "./renew_grant_reducer";
 import RequestBriefingReducer from "./request_briefing_reducer";
 import RequestHealthCheckReducer from "./request_health_check_reducer";
 import RequestMediationReducer from "./request_mediation_reducer";
+import RespondMoneyRequestReducer from "./respond_money_request_reducer";
 import RevokeGrantReducer from "./revoke_grant_reducer";
 import ScanOpportunitiesReducer from "./scan_opportunities_reducer";
 import SeedNemotronDemoReducer from "./seed_nemotron_demo_reducer";
+import SetAccountOwnerAccessReducer from "./set_account_owner_access_reducer";
 import SetAiEnabledReducer from "./set_ai_enabled_reducer";
+import SetMemberBirthDateReducer from "./set_member_birth_date_reducer";
 import SetMonthlySpendingReducer from "./set_monthly_spending_reducer";
 import SetPinReducer from "./set_pin_reducer";
 import ShareInsightReducer from "./share_insight_reducer";
@@ -77,6 +82,7 @@ import UpdateAccountReducer from "./update_account_reducer";
 import VoteReducer from "./vote_reducer";
 
 // Import all procedure arg schemas
+import * as SyncNessieDemoProcedure from "./sync_nessie_demo_procedure";
 import * as VerifyPinProcedure from "./verify_pin_procedure";
 
 // Import all table schema definitions
@@ -86,6 +92,7 @@ import HouseholdConsentLogRow from "./household_consent_log_table";
 import HouseholdPeopleRow from "./household_people_table";
 import HouseholdPresenceRow from "./household_presence_table";
 import HouseholdScenariosRow from "./household_scenarios_table";
+import MyAccountPrivacyRow from "./my_account_privacy_table";
 import MyAccountsRow from "./my_accounts_table";
 import MyAgentLogRow from "./my_agent_log_table";
 import MyAiInsightsRow from "./my_ai_insights_table";
@@ -96,6 +103,7 @@ import MyGrantsRow from "./my_grants_table";
 import MyHouseholdRow from "./my_household_table";
 import MyInviteCodeRow from "./my_invite_code_table";
 import MyMemberRow from "./my_member_table";
+import MyMoneyRequestsRow from "./my_money_requests_table";
 import MyNegotiationPositionsRow from "./my_negotiation_positions_table";
 import MyNegotiationsRow from "./my_negotiations_table";
 import MyObligationsRow from "./my_obligations_table";
@@ -149,6 +157,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, HouseholdScenariosRow),
+  myAccountPrivacy: __table({
+    name: 'my_account_privacy',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyAccountPrivacyRow),
   myAccounts: __table({
     name: 'my_accounts',
     indexes: [
@@ -219,6 +234,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyMemberRow),
+  myMoneyRequests: __table({
+    name: 'my_money_requests',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyMoneyRequestsRow),
   myNegotiationPositions: __table({
     name: 'my_negotiation_positions',
     indexes: [
@@ -272,12 +294,14 @@ const reducersSchema = __reducers(
   __reducerSchema("add_person", AddPersonReducer),
   __reducerSchema("add_transaction", AddTransactionReducer),
   __reducerSchema("admin_seed_demo", AdminSeedDemoReducer),
+  __reducerSchema("admin_set_demo_birth_dates", AdminSetDemoBirthDatesReducer),
   __reducerSchema("ask_coach", AskCoachReducer),
   __reducerSchema("ask_memory", AskMemoryReducer),
   __reducerSchema("ask_twin", AskTwinReducer),
   __reducerSchema("close_negotiation", CloseNegotiationReducer),
   __reducerSchema("create_grant", CreateGrantReducer),
   __reducerSchema("create_household", CreateHouseholdReducer),
+  __reducerSchema("create_money_request", CreateMoneyRequestReducer),
   __reducerSchema("fork", ForkReducer),
   __reducerSchema("join_household", JoinHouseholdReducer),
   __reducerSchema("open_negotiation", OpenNegotiationReducer),
@@ -291,10 +315,13 @@ const reducersSchema = __reducers(
   __reducerSchema("request_briefing", RequestBriefingReducer),
   __reducerSchema("request_health_check", RequestHealthCheckReducer),
   __reducerSchema("request_mediation", RequestMediationReducer),
+  __reducerSchema("respond_money_request", RespondMoneyRequestReducer),
   __reducerSchema("revoke_grant", RevokeGrantReducer),
   __reducerSchema("scan_opportunities", ScanOpportunitiesReducer),
   __reducerSchema("seed_nemotron_demo", SeedNemotronDemoReducer),
+  __reducerSchema("set_account_owner_access", SetAccountOwnerAccessReducer),
   __reducerSchema("set_ai_enabled", SetAiEnabledReducer),
+  __reducerSchema("set_member_birth_date", SetMemberBirthDateReducer),
   __reducerSchema("set_monthly_spending", SetMonthlySpendingReducer),
   __reducerSchema("set_pin", SetPinReducer),
   __reducerSchema("share_insight", ShareInsightReducer),
@@ -310,6 +337,7 @@ const reducersSchema = __reducers(
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
+  __procedureSchema("sync_nessie_demo", SyncNessieDemoProcedure.params, SyncNessieDemoProcedure.returnType),
   __procedureSchema("verify_pin", VerifyPinProcedure.params, VerifyPinProcedure.returnType),
 );
 

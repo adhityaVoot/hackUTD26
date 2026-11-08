@@ -12,7 +12,10 @@
     "spacetime:publish:local": "spacetime publish --module-path server --server local",
     "spacetime:publish": "spacetime publish --module-path server --server maincloud",
     "nessie:seed": "node scripts/seed-nessie.mjs",
-    "test:nessie": "npm --prefix spacetimedb test -- src/nessie/__tests__/demo.test.ts"
+    "test:nessie": "npm --prefix spacetimedb test -- src/nessie/__tests__/demo.test.ts",
+    "local:server": "node scripts/local-demo.mjs server",
+    "local:publish": "node scripts/local-demo.mjs publish",
+    "local:web": "node scripts/local-demo.mjs web"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.3.1",

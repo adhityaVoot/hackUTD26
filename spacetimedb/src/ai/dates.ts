@@ -1,9 +1,10 @@
+import { DEMO_START_DATE } from '../engine/calendar';
 // Day-number <-> calendar conversion for the AI layer.
-// Day 0 is 2026-01-01 (UTC). If engine/calendar.ts settles on a different epoch, change DAY0_UTC_MS.
+// The AI and financial engine share the same simulation epoch.
 // Only Date.UTC and explicit-timestamp Date objects are used, so this stays deterministic in reducers.
 
 const DAY_MS = 86_400_000;
-const DAY0_UTC_MS = Date.UTC(2026, 0, 1);
+const DAY0_UTC_MS = Date.parse(DEMO_START_DATE + 'T00:00:00Z');
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function dayToDate(day: number): Date {

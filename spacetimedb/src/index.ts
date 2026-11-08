@@ -1,3 +1,6 @@
+import {ageProfile,accountPrivacy,isMinor,setBirthDate,setOwnerAccess} from './accountPrivacy';
+import {simDayToIso} from './engine/calendar';
+import { moneyRequest, createMoneyRequest as createMoneyRequestRow, respondMoneyRequest as respondMoneyRequestRow } from './moneyRequests';
 import { registerNessie } from './nessie/module';
 import { SenderError, schema, t, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
 import {
@@ -96,6 +99,9 @@ import {
 const spacetimedb = schema(
   {
     household,
+    moneyRequest,
+    ageProfile,
+    accountPrivacy,
     person,
     member,
     account,
@@ -685,3 +691,36 @@ export const {
 
 /** Imports only the caller’s server-mapped synthetic bank customer. */
 export const syncNessieDemo = registerNessie(spacetimedb);
+
+export const createMoneyRequest = spacetimedb.reducer(
+  { recipientPersonId: t.u64(), amountCents: t.i64(), reason: t.string() },
+  (ctx,args) => createMoneyRequestRow(ctx,args.recipientPersonId,args.amountCents,args.reason),
+);
+export const respondMoneyRequest = spacetimedb.reducer(
+  { requestId: t.u64(), decision: t.string() },
+  (ctx,args) => respondMoneyRequestRow(ctx,args.requestId,args.decision),
+);
+export const myMoneyRequests = spacetimedb.view(
+  { name: 'my_money_requests', public: true }, t.array(moneyRequest.rowType), ctx => {
+    const member = ctx.db.member.identity.find(ctx.sender);
+    if (!member) return [];
+    const person = ctx.db.person.id.find(member.personId);
+    return [...ctx.db.moneyRequest.householdId.filter(member.householdId)].filter(row =>
+      row.requesterPersonId === member.personId || row.recipientPersonId === member.personId || person?.role === 'coowner');
+  },
+);
+
+export const setMemberBirthDate=spacetimedb.reducer({personId:t.u64(),birthDate:t.string()},(ctx,args)=>setBirthDate(ctx,args.personId,args.birthDate));
+export const setAccountOwnerAccess=spacetimedb.reducer({accountId:t.u64(),allowed:t.bool()},(ctx,args)=>setOwnerAccess(ctx,args.accountId,args.allowed));
+export const myAccountPrivacy=spacetimedb.view({name:'my_account_privacy',public:true},t.array(t.row('AccountPrivacySetting',{accountId:t.u64().primaryKey(),ownerAccessDisabled:t.bool(),isMinor:t.bool()})),ctx=>{
+ const me=ctx.db.member.identity.find(ctx.sender);if(!me)return [];const h=ctx.db.household.id.find(me.householdId);if(!h)return [];
+ const minor=isMinor(ctx.db.ageProfile.personId.find(me.personId)?.birthDate,simDayToIso(h.simDay));
+ return [...ctx.db.account.ownerPersonId.filter(me.personId)].filter(a=>a.householdId===me.householdId&&!a.isJoint).map(a=>({accountId:a.id,ownerAccessDisabled:ctx.db.accountPrivacy.accountId.find(a.id)?.ownerAccessDisabled??false,isMinor:minor}));
+});
+
+/** Demo-only fixture setup, protected by the database admin secret. */
+export const adminSetDemoBirthDates=spacetimedb.reducer({adminCode:t.string(),inviteCode:t.string(),birthDate:t.string()},(ctx,args)=>{
+ requireAdmin(ctx,args.adminCode);const h=ctx.db.household.inviteCode.find(args.inviteCode);if(!h)throw new SenderError('Household not found');
+ const d=new Date(args.birthDate+'T00:00:00Z');if(!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==args.birthDate||args.birthDate>simDayToIso(h.simDay))throw new SenderError('Invalid demo birth date');
+ for(const p of ctx.db.person.householdId.filter(h.id)){const row={personId:p.id,householdId:h.id,birthDate:args.birthDate};if(ctx.db.ageProfile.personId.find(p.id))ctx.db.ageProfile.personId.update(row);else ctx.db.ageProfile.insert(row);}
+});

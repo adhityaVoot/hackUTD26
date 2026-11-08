@@ -26,6 +26,20 @@ export const Account = __t.object("Account", {
 });
 export type Account = __Infer<typeof Account>;
 
+export const AccountPrivacy = __t.object("AccountPrivacy", {
+  accountId: __t.u64(),
+  householdId: __t.u64(),
+  ownerAccessDisabled: __t.bool(),
+});
+export type AccountPrivacy = __Infer<typeof AccountPrivacy>;
+
+export const AccountPrivacySetting = __t.object("AccountPrivacySetting", {
+  accountId: __t.u64(),
+  ownerAccessDisabled: __t.bool(),
+  isMinor: __t.bool(),
+});
+export type AccountPrivacySetting = __Infer<typeof AccountPrivacySetting>;
+
 export const AccountView = __t.object("AccountView", {
   id: __t.u64(),
   nickname: __t.string(),
@@ -38,6 +52,13 @@ export const AccountView = __t.object("AccountView", {
   aprBps: __t.i32(),
 });
 export type AccountView = __Infer<typeof AccountView>;
+
+export const AgeProfile = __t.object("AgeProfile", {
+  personId: __t.u64(),
+  householdId: __t.u64(),
+  birthDate: __t.string(),
+});
+export type AgeProfile = __Infer<typeof AgeProfile>;
 
 export const AgentLog = __t.object("AgentLog", {
   id: __t.u64(),
@@ -360,6 +381,22 @@ export const MemberSession = __t.object("MemberSession", {
 });
 export type MemberSession = __Infer<typeof MemberSession>;
 
+export const MoneyRequest = __t.object("MoneyRequest", {
+  id: __t.u64(),
+  householdId: __t.u64(),
+  requesterPersonId: __t.u64(),
+  recipientPersonId: __t.u64(),
+  amountCents: __t.i64(),
+  reason: __t.string(),
+  status: __t.string(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type MoneyRequest = __Infer<typeof MoneyRequest>;
+
+export const MyAccountPrivacy = __t.object("MyAccountPrivacy", {});
+export type MyAccountPrivacy = __Infer<typeof MyAccountPrivacy>;
+
 export const MyAccounts = __t.object("MyAccounts", {});
 export type MyAccounts = __Infer<typeof MyAccounts>;
 
@@ -389,6 +426,9 @@ export type MyInviteCode = __Infer<typeof MyInviteCode>;
 
 export const MyMember = __t.object("MyMember", {});
 export type MyMember = __Infer<typeof MyMember>;
+
+export const MyMoneyRequests = __t.object("MyMoneyRequests", {});
+export type MyMoneyRequests = __Infer<typeof MyMoneyRequests>;
 
 export const MyNegotiationPositions = __t.object("MyNegotiationPositions", {});
 export type MyNegotiationPositions = __Infer<typeof MyNegotiationPositions>;

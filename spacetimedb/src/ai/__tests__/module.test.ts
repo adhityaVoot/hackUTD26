@@ -138,19 +138,20 @@ describe('Nemotron module end to end', () => {
     // Draft fork for the Two-Key flow, with real ids and cents.
     const sc = store.rows('scenario')[0];
     expect(sc).toMatchObject({ status: 'draft', agentKind: 'coach', parentId: 50n, scope: 'individual', audiencePersonId: PRIYA });
-    expect(JSON.parse(store.rows('scenarioChange')[0].paramsJson)).toMatchObject({ amountCents: 320000 });
+    expect(JSON.parse(store.rows('scenarioChange')[0].paramsJson)).toMatchObject({ amountCents: 320000, amount: -320000 });
+    expect(typeof JSON.parse(store.rows('scenarioChange')[0].paramsJson).accountId).toBe('number');
     expect(ins.scenarioId).toBe(sc.id);
 
     // Append-only reasoning trail.
     const steps = store.rows('agentLog').map((l: any) => l.step);
     expect(steps).toEqual(expect.arrayContaining(['observe', 'injection_flag', 'pii_scan', 'simulate', 'verify', 'propose', 'usage']));
 
-    // Private inbox: Priya sees it, Sam doesn't, until Priya shares it.
+    // Inherited owner access is private to the requester; it must not leak into a shared answer.
     const seen = (p: bigint) => (mod.myAiInsights as any)(reducerCtx(p)).length;
     expect([seen(PRIYA), seen(SAM)]).toEqual([1, 0]);
     expect((mod.myAgentLog as any)(reducerCtx(SAM)).every((l: any) => l.step === 'injection_flag')).toBe(true);
-    (mod.shareInsight as any)(reducerCtx(PRIYA), { insightId: ins.id });
-    expect(seen(SAM)).toBe(1);
+    expect(() => (mod.shareInsight as any)(reducerCtx(PRIYA), { insightId: ins.id })).toThrow(/another member shared/);
+    expect(seen(SAM)).toBe(0);
   });
 
   it('only the requester can share, and personally granted data blocks sharing', () => {

@@ -3,9 +3,12 @@ export interface BankHttp { fetch(url: string, init: any): { status: number; tex
 export function nessieClient(http: BankHttp, base: string, key: string) {
   if (!/^https:\/\//.test(base)) throw Error('Nessie requires an HTTPS base URL');
   return (path: string): any => {
-    const response = http.fetch(`${base.replace(/\/$/, '')}${path}?key=${encodeURIComponent(key)}`, {
+    let response;
+    try { response = http.fetch(`${base.replace(/\/$/, '')}${path}?key=${encodeURIComponent(key)}`, {
       method: 'GET', headers: { accept: 'application/json' },
-    });
+    }); } catch {
+      throw Error('Nessie HTTPS connection failed. Check the server network and certificate configuration.');
+    }
     // This Nessie endpoint uses 404 for an empty transfer history.
     if (response.status === 404 && /^\/accounts\/[^/]+\/transfers$/.test(path)) {
       const text = response.text();
