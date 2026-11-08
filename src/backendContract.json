@@ -118,7 +118,8 @@
     "vote": [
       "scenarioId",
       "decision"
-    ]
+    ],
+    "sync_nessie_demo": []
   },
   "views": [
     "householdApprovals",

@@ -1,3 +1,4 @@
+import { registerNessie } from './nessie/module';
 import { SenderError, schema, t, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
 import {
   PIN_FAIL_WINDOW_MICROS,
@@ -141,6 +142,7 @@ const spacetimedb = schema(
       AI_FALLBACK_API_KEY: t.string().optional(),
       AI_FALLBACK_BASE_URL: t.string().optional(),
       AI_FALLBACK_MODEL: t.string().optional(),
+      NESSIE_DEMO_CUSTOMERS: t.string().optional(),
       NESSIE_API_KEY: t.string().optional(),
       NESSIE_BASE_URL: t.string().optional(),
       ADMIN_CODE: t.string().optional(),
@@ -680,3 +682,6 @@ export const {
   myNegotiationPositions,
 } = registerNemotron(spacetimedb);
 
+
+/** Imports only the caller’s server-mapped synthetic bank customer. */
+export const syncNessieDemo = registerNessie(spacetimedb);
