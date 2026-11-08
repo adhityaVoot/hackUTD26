@@ -225,6 +225,7 @@ const FEATURE_TOOLS: Record<FeatureKind, string[]> = {
   health: ['get_household_overview', 'get_vitals', 'get_forecast_summary', 'lookup_information', 'simulate_scenario', 'check_bank'],
   briefing: ['get_household_overview', 'get_forecast_summary', 'get_vitals', 'lookup_information', 'simulate_scenario', 'find_opportunities', 'check_bank'],
   coach: [],
+  clarify: [],
 };
 
 export function toolsFor(feature: FeatureKind): ToolSpec[] {

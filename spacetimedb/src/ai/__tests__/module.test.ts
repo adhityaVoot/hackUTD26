@@ -243,3 +243,14 @@ describe('Sentinel watch and coach threads (module)', () => {
     expect(JSON.parse(second.resultJson).extra.routedTo).toBe('briefing');
   });
 });
+
+describe('coach clarifying questions (module)', () => {
+  it('a vague trip request comes back as questions with no draft forks', () => {
+    (mod.askCoach as any)(reducerCtx(PRIYA), { message: 'Plan a trip to a couple countries in Africa and Asia', threadInsightId: 0n });
+    runJobs(scripted([() => ({ status: 500, body: {} })])); // model down: rule-based questions
+    const r = JSON.parse(store.rows('aiInsight')[0].resultJson);
+    expect(r.kind).toBe('clarify');
+    expect(r.extra.questions.length).toBeGreaterThanOrEqual(3);
+    expect(store.rows('scenario')).toHaveLength(0);
+  });
+});

@@ -10,10 +10,10 @@
 
 import { diffView } from './tools';
 import { fallback, finalize, healthCandidates } from './features';
-import { collectNumbers, redactNames, sanitizeUserText, scanOutbound } from './gateway';
+import { checkNumbers, collectNumbers, redactNames, sanitizeUserText, scanOutbound } from './gateway';
 import { chat, extractJson, type ChatMessage, type HttpLike, type ModelConfig, type ToolSpec } from './model';
 import { jsonToolProtocol, ROUTER_PROMPT, systemPrompt } from './prompts';
-import { classifyMessage } from './intent';
+import { clarifyQuestions, classifyMessage, type Clarify } from './intent';
 import { dayToLabel } from './dates';
 import { executeTool, toolsFor, type AgentState } from './tools';
 import { ROUTABLE, type AgentStep, type FeatureKind, type InsightResult } from './types';
@@ -251,6 +251,7 @@ export interface CoachTurn {
 export interface Route {
   feature: FeatureKind;
   request: string;
+  clarify?: Clarify; // set when the coach should ask before answering
   steps: AgentStep[];
   promptTokens: number;
   completionTokens: number;
@@ -265,8 +266,9 @@ export function routeCoach(message: string, history: CoachTurn[], names: Map<str
   const clean = (s: string) => sanitizeUserText(s, names, 600);
   const rules = (why: string): Route => {
     const feature = classifyMessage(message);
-    steps.push({ step: 'route', detail: `rule-based routing to ${feature} (${why})`, flagged: false });
-    return { feature, request: clean(message), steps, promptTokens: 0, completionTokens: 0 };
+    const clarify = clarifyQuestions(clean(message), history.map(h => ({ question: clean(h.question), answer: h.answer })));
+    steps.push({ step: 'route', detail: clarify ? `rule-based: asking ${clarify.questions.length} question(s) before planning (${why})` : `rule-based routing to ${feature} (${why})`, flagged: false });
+    return { feature, request: clean(message), clarify: clarify ?? undefined, steps, promptTokens: 0, completionTokens: 0 };
   };
   if (!deps.primary) return rules('AI is off');
   const convo = history.slice(-3).map(h => ({ asked: clean(h.question), answered: clean(h.answer).slice(0, 400) }));
@@ -276,12 +278,45 @@ export function routeCoach(message: string, history: CoachTurn[], names: Map<str
     steps.push({ step: 'pii_scan', detail: `router payload blocked: ${scan.reason}`, flagged: true });
     return rules('privacy scan');
   }
-  const res = chat(deps.http, deps.primary, [{ role: 'system', content: ROUTER_PROMPT }, { role: 'user', content: user }], { maxTokens: 300, temperature: 0, timeout: deps.timeout, sleep: deps.sleep });
+  const res = chat(deps.http, deps.primary, [{ role: 'system', content: ROUTER_PROMPT }, { role: 'user', content: user }], { maxTokens: 600, temperature: 0, timeout: deps.timeout, sleep: deps.sleep });
   if (!res.ok) return rules(`model unavailable: ${res.error.slice(0, 60)}`);
-  const parsed = extractJson(res.message?.content ?? '') as { workflow?: string; request?: string } | null;
+  const parsed = extractJson(res.message?.content ?? '') as { workflow?: string; request?: string; needs_clarification?: boolean; message?: string; questions?: unknown } | null;
   const feature = parsed?.workflow as FeatureKind;
   if (!parsed || !ROUTABLE.includes(feature)) return rules('router reply was not a known workflow');
   const request = typeof parsed.request === 'string' && parsed.request.trim() ? clean(parsed.request) : clean(message);
+  const usage = { promptTokens: res.promptTokens, completionTokens: res.completionTokens };
+  // A single purchase ("I want a Rolex") is looked up and priced, not interrogated.
+  const singlePurchase = /\b(buy|purchase|get|afford|want|wanna)\b/i.test(message) && !/\b(trip|travel|vacation|holiday|honeymoon|wedding|move|moving|renovat|plan)\b/i.test(message);
+  if (parsed.needs_clarification === true && !singlePurchase) {
+    const questions = (Array.isArray(parsed.questions) ? parsed.questions : [])
+      .filter((x): x is string => typeof x === 'string' && x.trim().length > 3)
+      // The app already knows the household's money; never ask for it.
+      .filter(x => !/\b(cash ?flow|income|salary|balance|how much (do you|you) (have|earn|make)|savings|monthly (budget|expenses))\b/i.test(x))
+      .slice(0, 4)
+      .map(x => x.trim().slice(0, 220));
+    // The intro must not repeat the questions inline ("could you share: 1) ... 2) ...").
+    const rawIntro = typeof parsed.message === 'string' ? parsed.message.trim() : '';
+    // Keep the opening sentences that don't ask anything; the questions are listed separately.
+    const sentences = rawIntro.match(/[^.!?]+[.!?]+/g) ?? [rawIntro];
+    const lead: string[] = [];
+    for (const sn of sentences) {
+      if (/\?|could you|can you|let me know|tell me|share/i.test(sn)) break;
+      lead.push(sn.trim());
+    }
+    const intro = lead.join(' ').slice(0, 400);
+    // Questions must not introduce figures the member never gave.
+    const known = collectNumbers([message, ...history.map(h => h.question)]);
+    const invented = [intro, ...questions].some(t => !checkNumbers(t, known).ok);
+    if (questions.length && !invented) {
+      steps.push({ step: 'route', detail: `Nemotron is asking ${questions.length} question(s) before planning: ${questions.join(' | ').slice(0, 300)}`, flagged: false });
+      return { feature, request, clarify: { message: intro || 'Happy to help. A few quick questions first:', questions }, steps, ...usage };
+    }
+    const backup = clarifyQuestions(clean(message), history.map(h => ({ question: clean(h.question), answer: h.answer })));
+    if (backup) {
+      steps.push({ step: 'route', detail: 'Nemotron wanted to ask questions; using rule-based questions instead', flagged: false });
+      return { feature, request, clarify: backup, steps, ...usage };
+    }
+  }
   steps.push({ step: 'route', detail: `Nemotron routed the message to ${feature}: "${request.slice(0, 160)}"`, flagged: false });
-  return { feature, request, steps, promptTokens: res.promptTokens, completionTokens: res.completionTokens };
+  return { feature, request, steps, ...usage };
 }

@@ -59,6 +59,7 @@ function CoachChat({s,agentForks}){
         <div className="coach-bubble coach-reply">
           {row.status==='thinking'?<p className="coach-thinking">Checking prices and running the numbers…</p>:<>
             <p>{r.answer||'No answer came back.'}</p>
+            {Array.isArray(r.extra?.questions)&&r.extra.questions.length>1&&<ul className="coach-questions">{r.extra.questions.map((q,i)=><li key={i}>{q}</li>)}</ul>}
             {r.followUp&&<p className="coach-follow">{r.followUp}</p>}
             {Array.isArray(r.sources)&&r.sources.length>0&&<p className="coach-sources">Sources: {r.sources.map((x,i)=><React.Fragment key={x.url}>{i>0&&' · '}<a href={x.url} target="_blank" rel="noreferrer noopener">{x.title}</a></React.Fragment>)}</p>}
             {r.source==='fallback'&&<small className="coach-meta">Rule-based answer (Nemotron was unavailable)</small>}

@@ -438,3 +438,40 @@ describe('conversational coach with online prices (Rolex)', () => {
     expect(out.result.followUp).toBe('What price range do you have in mind?');
   });
 });
+
+describe('asks before planning when the request is vague', () => {
+  it('rule-based: a vague multi-country trip gets questions, not a guessed budget', async () => {
+    const { clarifyQuestions } = await import('../intent');
+    const c = clarifyQuestions('Plan a trip to a couple countries in Africa and Asia', [])!;
+    expect(c.questions.length).toBeGreaterThanOrEqual(3);
+    expect(c.questions.join(' ')).toMatch(/Which countries/);
+    expect(c.questions.join(' ')).toMatch(/economy, business or first class/);
+    expect(c.questions.join(' ')).not.toMatch(/\$\d/);
+  });
+
+  it('rule-based: specific requests and single purchases go straight through', async () => {
+    const { clarifyQuestions } = await import('../intent');
+    expect(clarifyQuestions('Can we afford a $3,200 trip to Japan in March for 10 days, just the two of us, mid-range hotels?', [])).toBeNull();
+    expect(clarifyQuestions('I wanna buy a rolex', [])).toBeNull();
+    // Already asked once and answered: proceed.
+    expect(clarifyQuestions('Kenya and Thailand, two weeks in July, just me, mid-range', [{ question: 'Plan a trip', answer: 'Which countries?' }, { question: 'x', answer: 'y' }])).toBeNull();
+  });
+
+  it('Nemotron router: asks warm questions; rejects questions with invented figures', () => {
+    const ask = fakeHttp([() => ({ body: final({ workflow: 'life_event', request: 'Plan a multi-country trip', needs_clarification: true, message: "Love that idea! A few questions so the numbers are real:", questions: ['Which countries are you thinking of?', 'When and for how long?', 'Economy or business class, and what kind of hotels?'] }) })]);
+    const r = routeCoach('Plan a trip to a couple countries in Africa and Asia', [], new Map(), { http: ask, primary: cfg, secondary: null });
+    expect(r.clarify?.questions).toHaveLength(3);
+    expect(r.clarify?.message).toMatch(/^Love that idea/);
+
+    const invents = fakeHttp([() => ({ body: final({ workflow: 'life_event', request: 'x', needs_clarification: true, message: 'Sure!', questions: ['Is $8,000 your budget?', 'Is June good?'] }) })]);
+    const r2 = routeCoach('Plan a trip to a couple countries in Africa and Asia', [], new Map(), { http: invents, primary: cfg, secondary: null });
+    expect(r2.clarify?.questions.join(' ')).not.toMatch(/8,000/); // fell back to rule-based questions
+  });
+
+  it('when the member has answered, the router plans instead of asking again', () => {
+    const go = fakeHttp([() => ({ body: final({ workflow: 'life_event', request: 'Plan a two-week trip to Kenya and Thailand in July 2027, solo, mid-range hotels, economy flights', needs_clarification: false }) })]);
+    const r = routeCoach('Kenya and Thailand, two weeks in July, just me, mid-range and economy', [{ question: 'Plan a trip to a couple countries in Africa and Asia', answer: 'Which countries? When? How long?' }], new Map(), { http: go, primary: cfg, secondary: null });
+    expect(r.clarify).toBeUndefined();
+    expect(r.feature).toBe('life_event');
+  });
+});

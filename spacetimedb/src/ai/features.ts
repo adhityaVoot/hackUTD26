@@ -333,6 +333,7 @@ export function finalize(state: AgentState, parsed: any, model: string): Finaliz
       break;
     }
     case 'coach':
+    case 'clarify':
       c.errors.push('internal: coach must be routed before running');
       break;
     case 'opportunity': {
@@ -366,7 +367,7 @@ function publicOpp(o: ReturnType<typeof getOpportunities>[number]) {
 }
 
 function defaultTitle(f: FeatureKind): string {
-  return { twin: 'Your question', ripple: 'Ripple effect', negotiation: 'A middle path', stress: 'Stress test', life_event: 'Life event plan', memory: 'From your decision log', opportunity: 'Opportunities', health: 'Your financial health', briefing: 'Household briefing', coach: 'Coach' }[f];
+  return { twin: 'Your question', ripple: 'Ripple effect', negotiation: 'A middle path', stress: 'Stress test', life_event: 'Life event plan', memory: 'From your decision log', opportunity: 'Opportunities', health: 'Your financial health', briefing: 'Household briefing', coach: 'Coach', clarify: 'A few questions first' }[f];
 }
 
 function summaryLine(s: Sim): string {
@@ -572,6 +573,8 @@ export function fallback(state: AgentState, reason: string): InsightResult {
       r.extra = { mode: sentinel ? 'sentinel' : 'weekly', reason };
       return r;
     }
+    case 'clarify':
+      return base(state, 'A few questions first', 'Tell me a bit more and I can work it out.', 'fallback');
     case 'coach':
       return base(state, 'Coach', 'I could not work out what to look at. Try asking about a purchase, an emergency, or your vitals.', 'fallback');
     case 'opportunity': {

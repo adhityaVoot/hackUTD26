@@ -15,7 +15,8 @@ export type FeatureKind =
   | 'opportunity' // 7. Opportunity Radar
   | 'health' // PNC: the six vitals explained, with the best next move
   | 'briefing' // Proactive: forecast + obligations + risks, run on a schedule; Sentinel mode proposes a fix
-  | 'coach'; // Conversational coach: Nemotron routes the message to one of the features above
+  | 'coach' // Conversational coach: Nemotron routes the message to one of the features above
+  | 'clarify'; // The coach needs more detail before it can answer confidently: it asks questions instead
 
 export const FEATURE_KINDS: FeatureKind[] = [
   'twin',
